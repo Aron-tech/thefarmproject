@@ -1,32 +1,62 @@
-import type { MainToWorkerMessage, WorkerToMainMessage } from './protocol.ts';
+import type { ActionResult } from '../state/types.ts';
+import type { OpsPerSecond, RunOptions, WorkerToMainMessage } from './protocol.ts';
+import type { InterpreterTransport } from './transport.ts';
 
-/** Main-thread wrapper around the interpreter Web Worker. */
+/** Main-thread handle to the interpreter: typed commands and run-scoped message filtering. */
 export class InterpreterClient {
-  private readonly worker: Worker;
+  private readonly transport: InterpreterTransport;
+  private currentRunId = 0;
+  private handler: (message: WorkerToMainMessage) => void = () => {};
 
-  constructor() {
-    this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-  }
-
-  /** Round-trips a ping through the worker and resolves with the latency in ms. */
-  ping(): Promise<number> {
-    return new Promise((resolve) => {
-      const handleMessage = (event: MessageEvent<WorkerToMainMessage>) => {
-        if (event.data.type === 'pong') {
-          this.worker.removeEventListener('message', handleMessage);
-          resolve(performance.now() - event.data.sentAt);
-        }
-      };
-      this.worker.addEventListener('message', handleMessage);
-      this.send({ type: 'ping', sentAt: performance.now() });
+  constructor(transport: InterpreterTransport) {
+    this.transport = transport;
+    transport.setMessageHandler((message) => {
+      // Messages from a run that was stopped or replaced are stale and dropped.
+      if (message.runId === this.currentRunId) this.handler(message);
     });
   }
 
-  terminate(): void {
-    this.worker.terminate();
+  onMessage(handler: (message: WorkerToMainMessage) => void): void {
+    this.handler = handler;
   }
 
-  private send(message: MainToWorkerMessage): void {
-    this.worker.postMessage(message);
+  run(code: string, options: RunOptions): number {
+    this.currentRunId++;
+    this.transport.postMessage({ type: 'run', runId: this.currentRunId, code, ...options });
+    return this.currentRunId;
+  }
+
+  stop(): void {
+    this.currentRunId++;
+    this.transport.postMessage({ type: 'stop' });
+  }
+
+  pause(): void {
+    this.transport.postMessage({ type: 'pause' });
+  }
+
+  resume(): void {
+    this.transport.postMessage({ type: 'resume' });
+  }
+
+  step(): void {
+    this.transport.postMessage({ type: 'step' });
+  }
+
+  setBreakpoints(lines: number[]): void {
+    this.transport.postMessage({ type: 'setBreakpoints', lines });
+  }
+
+  setSpeed(opsPerSecond: OpsPerSecond): void {
+    this.transport.postMessage({ type: 'setSpeed', opsPerSecond });
+  }
+
+  respondToAction(runId: number, requestId: number, result: ActionResult): void {
+    if (runId !== this.currentRunId) return;
+    this.transport.postMessage({ type: 'actionResult', runId, requestId, result });
+  }
+
+  terminate(): void {
+    this.transport.terminate();
   }
 }
