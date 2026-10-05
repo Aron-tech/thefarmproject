@@ -11,6 +11,11 @@ export interface ConsoleEntry {
   text: string;
 }
 
+export interface RunError {
+  message: string;
+  line: number | null;
+}
+
 export interface SpeedPreset {
   label: string;
   opsPerSecond: OpsPerSecond;
@@ -43,7 +48,7 @@ export interface GameStoreState {
   runStatus: RunStatus;
   /** Line of the statement currently executing (or about to, when paused). */
   currentLine: number | null;
-  errorLine: number | null;
+  lastError: RunError | null;
   variables: VariableSnapshot | null;
   console: ConsoleEntry[];
 }
@@ -64,7 +69,7 @@ export function createGameStore({ game, code = DEFAULT_CODE, speed = BASE_OPS_PE
     speed,
     runStatus: 'idle',
     currentLine: null,
-    errorLine: null,
+    lastError: null,
     variables: null,
     console: [],
   }));

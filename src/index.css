@@ -1,7 +1,226 @@
 @import 'tailwindcss';
 
+:root {
+  --farm-bg-top: #7a93a1;
+  --farm-bg-bottom: #87a0ad;
+  --farm-window-body: #1e1e1e;
+  --farm-window-frame: #4b4b4b;
+  --farm-titlebar: #3f3f3f;
+  --farm-olive: #5b7a10;
+  --farm-olive-light: #6f9216;
+  --farm-olive-dark: #435b0a;
+  --farm-alert: #e5501c;
+  --farm-alert-light: #f26a32;
+  --farm-alert-dark: #b83c12;
+}
+
 html,
 body,
 #root {
   height: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: #f5f5f4;
+  font-family: 'Montserrat', 'Segoe UI', system-ui, sans-serif;
+  background: var(--farm-bg-bottom);
+}
+
+/* The game's flat, muted blue-grey backdrop behind the floating farm. */
+.farm-backdrop {
+  background: linear-gradient(to bottom, var(--farm-bg-top), var(--farm-bg-bottom));
+}
+
+/* ---------------------------------------------------------------- windows */
+
+.farm-window {
+  background: var(--farm-titlebar);
+  border: 2px solid var(--farm-window-frame);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.28);
+  overflow: hidden;
+}
+
+.farm-window-titlebar {
+  background: var(--farm-titlebar);
+}
+
+.farm-window-title {
+  font-family: 'Fira Mono', Consolas, monospace;
+  font-size: 15px;
+  color: #f0f0f0;
+}
+
+.farm-window-body {
+  background: var(--farm-window-body);
+  margin: 0 3px 3px;
+  border: 1px solid #151515;
+}
+
+/* Square buttons with a bevel, as on the game's windows and top-right toolbar. */
+.farm-square-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #ffffff;
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 0 -2px 0 rgb(0 0 0 / 0.25);
+  transition: filter 0.1s;
+}
+
+.farm-square-button:hover {
+  filter: brightness(1.15);
+}
+
+.farm-square-button:active {
+  filter: brightness(0.9);
+  box-shadow: inset 0 2px 0 rgb(0 0 0 / 0.25);
+}
+
+.farm-square-button-olive {
+  background: linear-gradient(to bottom, var(--farm-olive-light), var(--farm-olive));
+  border: 1px solid var(--farm-olive-dark);
+}
+
+.farm-square-button-alert {
+  background: linear-gradient(to bottom, var(--farm-alert-light), var(--farm-alert));
+  border: 1px solid var(--farm-alert-dark);
+}
+
+.farm-toolbar-button {
+  width: 52px;
+  height: 52px;
+  border-width: 2px;
+  box-shadow:
+    inset 0 2px 0 rgb(255 255 255 / 0.18),
+    inset 0 -3px 0 rgb(0 0 0 / 0.25),
+    0 3px 8px rgb(0 0 0 / 0.2);
+}
+
+.farm-tab {
+  font-family: 'Fira Mono', Consolas, monospace;
+  font-size: 14px;
+  padding: 2px 8px;
+  color: #a8a8a8;
+  border-radius: 2px;
+}
+
+.farm-tab:hover {
+  color: #ffffff;
+}
+
+.farm-tab-active {
+  color: #ffffff;
+  background: rgb(255 255 255 / 0.1);
+}
+
+/* ---------------------------------------------------------------- menu */
+
+.farm-menu {
+  background: #2b2b2b;
+  border: 2px solid var(--farm-window-frame);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.3);
+}
+
+.farm-chip {
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e7e5e4;
+  background: #3f3f3f;
+  border: 1px solid #555555;
+  border-radius: 2px;
+}
+
+.farm-chip:hover {
+  background: #4a4a4a;
+}
+
+.farm-chip-active {
+  color: #ffffff;
+  background: var(--farm-olive);
+  border-color: var(--farm-olive-dark);
+}
+
+/* ---------------------------------------------------------------- resource bar */
+
+.farm-item-count {
+  margin-top: 2px;
+  font-weight: 700;
+  font-size: 16px;
+  color: #ffffff;
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.45),
+    0 0 1px rgb(0 0 0 / 0.6);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- print() speech bubble above the drone */
+
+.farm-speech-bubble {
+  position: relative;
+  width: max-content;
+  max-width: 260px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1c1917;
+  font: 600 14px/1.3 'Montserrat', system-ui, sans-serif;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.25);
+  transform: translateY(-50%);
+  animation: farm-bubble-in 0.18s ease-out;
+}
+
+.farm-speech-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  margin-left: -7px;
+  border-width: 7px 7px 0;
+  border-style: solid;
+  border-color: #ffffff transparent transparent;
+}
+
+@keyframes farm-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(-30%) scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+/* ---------------------------------------------------------------- Monaco decorations */
+
+.farm-breakpoint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.farm-breakpoint::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #e5501c;
+}
+
+.farm-current-line {
+  background: rgb(255 255 255 / 0.12);
+}
+
+.farm-paused-line {
+  background: rgb(242 209 75 / 0.25);
+}
+
+.farm-error-line {
+  background: rgb(229 80 28 / 0.28);
 }

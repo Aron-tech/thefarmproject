@@ -75,12 +75,12 @@ describe('GameLoop', () => {
     const { loop, store } = setup('x = 1\nif x\n    pass');
     loop.run();
     await waitFor(() => store.getState().runStatus === 'idle');
-    expect(store.getState().errorLine).toBe(2);
+    expect(store.getState().lastError?.line).toBe(2);
     expect(store.getState().console.at(-1)?.text).toMatch(/^SyntaxError/);
 
     store.setState({ code: 'move(North)\nmove("East")' });
     loop.run();
-    await waitFor(() => store.getState().errorLine === 2 && store.getState().runStatus === 'idle');
+    await waitFor(() => store.getState().lastError?.line === 2 && store.getState().runStatus === 'idle');
     expect(loop.getState().drone.pos).toEqual({ x: 0, y: 1 });
   });
 

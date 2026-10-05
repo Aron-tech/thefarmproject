@@ -1,19 +1,27 @@
+import { useState } from 'react';
 import { FarmScene } from '../rendering/FarmScene.tsx';
+import { CodeWindow } from './CodeWindow.tsx';
+import { GameContext, type GameServices } from './gameContext.ts';
+import { ItemsPanel } from './ItemsPanel.tsx';
+import { OutputWindow } from './OutputWindow.tsx';
+import { Toolbar } from './Toolbar.tsx';
 
-export function App() {
+/** The farm floats in the middle of the screen; code and output windows float above it, as in the game. */
+export function App({ services }: { services: GameServices }) {
+  const [codeOpen, setCodeOpen] = useState(true);
+  const [outputOpen, setOutputOpen] = useState(true);
+
   return (
-    <div className="flex h-full flex-col text-stone-100">
-      <header className="flex items-center justify-between border-b border-stone-700 px-4 py-2">
-        <h1 className="text-lg font-semibold">The Farm Project</h1>
-      </header>
-      <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
-        <section className="min-h-64">
-          <FarmScene />
-        </section>
-        <section className="flex items-center justify-center border-t border-stone-700 text-stone-500 md:border-t-0 md:border-l">
-          Code editor (M1)
-        </section>
-      </main>
-    </div>
+    <GameContext.Provider value={services}>
+      <div className="farm-backdrop relative h-full w-full overflow-hidden">
+        <div className="absolute inset-0">
+          <FarmScene store={services.store} loop={services.loop} />
+        </div>
+        <ItemsPanel />
+        <Toolbar onOpenCode={() => setCodeOpen(true)} outputOpen={outputOpen} onToggleOutput={() => setOutputOpen((open) => !open)} />
+        {codeOpen && <CodeWindow onClose={() => setCodeOpen(false)} />}
+        {outputOpen && <OutputWindow onClose={() => setOutputOpen(false)} />}
+      </div>
+    </GameContext.Provider>
   );
 }

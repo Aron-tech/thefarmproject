@@ -1,10 +1,16 @@
 import type { InterpreterClient } from '../core/interpreter/client.ts';
 import type { OpsPerSecond, WorkerToMainMessage } from '../core/interpreter/protocol.ts';
 import { applyAction } from '../core/state/actions.ts';
-import type { GameState } from '../core/state/types.ts';
-import type { ConsoleEntry, GameStore, GameStoreState } from './gameStore.ts';
+import type { ActionResult, DroneAction, GameState } from '../core/state/types.ts';
+import { BASE_OPS_PER_SECOND, type ConsoleEntry, type GameStore, type GameStoreState } from './gameStore.ts';
 
 const MAX_CONSOLE_ENTRIES = 500;
+const IDLE_CLOCK_INTERVAL_MS = 100;
+
+/** Things that happened in the world, for animations and effects. */
+export type GameEvent =
+  | { type: 'action'; action: DroneAction; result: ActionResult; before: GameState; after: GameState }
+  | { type: 'print'; text: string };
 
 export type FlushScheduler = (flush: () => void) => void;
 
@@ -25,6 +31,7 @@ export class GameLoop {
   private pendingConsole: ConsoleEntry[] = [];
   private flushScheduled = false;
   private nextConsoleId = 1;
+  private readonly eventListeners = new Set<(event: GameEvent) => void>();
 
   constructor(store: GameStore, client: InterpreterClient, scheduleFlush: FlushScheduler = defaultFlushScheduler) {
     this.store = store;
@@ -37,6 +44,32 @@ export class GameLoop {
   /** The latest state, which may be ahead of what the store has published. */
   getState(): GameState {
     return this.state;
+  }
+
+  subscribeEvents(listener: (event: GameEvent) => void): () => void {
+    this.eventListeners.add(listener);
+    return () => this.eventListeners.delete(listener);
+  }
+
+  /**
+   * Lets game time pass in real time while no program is running, so crops keep growing.
+   * While a program runs, the interpreter's tick count drives the clock instead.
+   */
+  startIdleClock(): () => void {
+    let last = performance.now();
+    const timer = setInterval(() => {
+      const now = performance.now();
+      const elapsed = now - last;
+      last = now;
+      if (this.store.getState().runStatus !== 'idle') return;
+      this.state = { ...this.state, tick: this.state.tick + (elapsed * BASE_OPS_PER_SECOND) / 1000 };
+      this.scheduleUpdate();
+    }, IDLE_CLOCK_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }
+
+  isPaused(): boolean {
+    return this.store.getState().runStatus === 'paused';
   }
 
   run(): void {
@@ -90,16 +123,21 @@ export class GameLoop {
   private startRun(pauseAtStart: boolean): void {
     const { code, speed, breakpoints, runStatus } = this.store.getState();
     if (runStatus !== 'idle') this.client.stop();
-    this.client.run(code, { startTicks: this.state.tick, opsPerSecond: speed, breakpoints, pauseAtStart });
-    this.patch({ runStatus: 'running', currentLine: null, errorLine: null, variables: null }, true);
+    const startTicks = Math.ceil(this.state.tick);
+    this.state = { ...this.state, tick: startTicks };
+    this.client.run(code, { startTicks, opsPerSecond: speed, breakpoints, pauseAtStart });
+    this.patch({ runStatus: 'running', currentLine: null, lastError: null, variables: null }, true);
   }
 
   private handleMessage(message: WorkerToMainMessage): void {
     switch (message.type) {
       case 'action': {
-        const outcome = applyAction(this.state, message.action, message.ticks);
+        const before = this.state;
+        // The idle clock may have run ahead of the interpreter's tick count; never move time backwards.
+        const outcome = applyAction(before, message.action, Math.max(message.ticks, before.tick));
         this.state = outcome.state;
         this.client.respondToAction(message.runId, message.requestId, outcome.result);
+        this.emit({ type: 'action', action: message.action, result: outcome.result, before, after: outcome.state });
         this.scheduleUpdate();
         return;
       }
@@ -109,6 +147,7 @@ export class GameLoop {
         return;
       case 'print':
         this.log('print', message.text);
+        this.emit({ type: 'print', text: message.text });
         return;
       case 'paused':
         this.advanceClock(message.ticks);
@@ -120,7 +159,10 @@ export class GameLoop {
       case 'error':
         this.advanceClock(message.ticks);
         this.log('error', message.message);
-        this.patch({ runStatus: 'idle', currentLine: null, errorLine: message.line, variables: null }, true);
+        this.patch(
+          { runStatus: 'idle', currentLine: null, lastError: { message: message.message, line: message.line }, variables: null },
+          true,
+        );
         return;
       case 'finished':
         this.advanceClock(message.ticks);
@@ -134,7 +176,11 @@ export class GameLoop {
     if (ticks > this.state.tick) this.state = { ...this.state, tick: ticks };
   }
 
-  private log(kind: ConsoleEntry['kind'], text: string): void {
+  private emit(event: GameEvent): void {
+    for (const listener of this.eventListeners) listener(event);
+  }
+
+  log(kind: ConsoleEntry['kind'], text: string): void {
     this.pendingConsole.push({ id: this.nextConsoleId++, kind, text });
     this.scheduleUpdate();
   }
