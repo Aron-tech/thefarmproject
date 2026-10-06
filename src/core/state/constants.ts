@@ -65,7 +65,8 @@ export interface CropDef {
 
 export const CROP_DEFS: Record<EntityType, CropDef> = {
   Grass: {
-    baseGrowTicks: 1000,
+    // Faster than an un-upgraded drone acts, so the first program, `while True: harvest()`, always gets hay.
+    baseGrowTicks: 500,
     harvestYield: { Hay: 1 },
     plantCost: {},
     allowedGrounds: ['Grassland', 'Soil'],

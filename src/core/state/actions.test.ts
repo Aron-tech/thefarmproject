@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction } from './actions.ts';
-import { ACTIONS_PER_POWER, CROP_DEFS, GROWTH_VARIANCE, SUNFLOWER_BONUS_MULTIPLIER } from './constants.ts';
+import {
+  ACTION_OPS_COST,
+  ACTIONS_PER_POWER,
+  BASE_OPS_PER_SECOND,
+  CROP_DEFS,
+  GAME_TICKS_PER_SECOND,
+  GROWTH_VARIANCE,
+  SUNFLOWER_BONUS_MULTIPLIER,
+} from './constants.ts';
 import { createGameState } from './gameState.ts';
 import { getCell } from './grid.ts';
 import type { DroneAction, GameState } from './types.ts';
@@ -53,6 +61,17 @@ describe('move', () => {
 });
 
 describe('harvest', () => {
+  it('lets a plain harvest loop on a new farm always find ripe grass', () => {
+    // An un-upgraded drone harvests once every this many game ticks.
+    const harvestInterval = (ACTION_OPS_COST / BASE_OPS_PER_SECOND) * GAME_TICKS_PER_SECOND;
+    expect(CROP_DEFS.Grass.baseGrowTicks * (1 + GROWTH_VARIANCE)).toBeLessThan(harvestInterval);
+
+    let state = createGameState();
+    let tick = CROP_DEFS.Grass.baseGrowTicks * (1 + GROWTH_VARIANCE);
+    for (let i = 0; i < 20; i++, tick += harvestInterval) state = applyAction(state, { kind: 'harvest' }, tick).state;
+    expect(state.inventory.Hay).toBe(20);
+  });
+
   it('yields hay from ripe grass and regrows grass on grassland', () => {
     const state = createGameState(3);
     const { state: next, result } = applyAction(state, { kind: 'harvest' }, LATE);

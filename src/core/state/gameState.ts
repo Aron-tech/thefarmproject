@@ -26,7 +26,9 @@ export function createGameState(
   seed = DEFAULT_RNG_SEED,
   unlocks: UnlockLevels = createLockedUnlocks(),
 ): GameState {
-  const [cells, rngState] = createGrid(worldSize, 0, seed);
+  const [grid, rngState] = createGrid(worldSize, 0, seed);
+  // A new farm starts with fully grown grass, ready for the first harvest().
+  const cells = grid.map((cell) => (cell.entity ? { ...cell, entity: { ...cell.entity, plantedAt: -cell.entity.growTicks } } : cell));
   return digMineLayers({
     worldSize,
     cells,
