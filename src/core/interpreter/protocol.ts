@@ -37,7 +37,7 @@ export type MainToWorkerMessage =
 
 /** Messages sent from the interpreter worker to the main thread. Every message names the run it belongs to. */
 export type WorkerToMainMessage =
-  | { type: 'action'; runId: number; requestId: number; action: DroneAction; ticks: number }
+  | { type: 'action'; runId: number; requestId: number; action: DroneAction; ticks: number; location: CodeLocation }
   | { type: 'progress'; runId: number; ticks: number; location: CodeLocation }
   | { type: 'print'; runId: number; ticks: number; text: string }
   | { type: 'paused'; runId: number; ticks: number; location: CodeLocation; variables: VariableSnapshot }

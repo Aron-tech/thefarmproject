@@ -1,10 +1,12 @@
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
-import { Color, Euler, Matrix4, MeshStandardMaterial, Quaternion, Vector3, type InstancedMesh } from 'three';
+import { Color, Euler, Matrix4, MeshStandardMaterial, Quaternion, Vector3, type Group, type InstancedMesh } from 'three';
 import { getGrowthProgress } from '../core/state/crops.ts';
 import { ENTITY_TYPES, type Cell, type EntityType, type GameState } from '../core/state/types.ts';
 import type { GameLoop } from '../game/GameLoop.ts';
+import type { GameStore } from '../game/gameStore.ts';
 import { cellToWorld } from './layout.ts';
+import { fadeMaterial, getFocusDepth } from './viewDepth.ts';
 import { createDebrisGeometry, createPuffGeometry, getPlantGeometry, PLANT_PARTICLE_COLORS } from './models.ts';
 
 /** Plants being removed keep rendering briefly (pop + shrink); at most this many at once. */
@@ -58,6 +60,8 @@ const UNRIPE_TINTS: Record<EntityType, Color> = {
   Bush: new Color(0.8, 0.85, 0.7),
   Carrot: new Color(0.8, 0.85, 0.7),
   Sunflower: new Color(0.75, 0.9, 0.6),
+  Rice: new Color(0.7, 0.95, 0.6),
+  Mushroom: new Color(0.8, 0.8, 0.8),
 };
 const WHITE = new Color(1, 1, 1);
 const PUFF_COLOR = new Color('#f4efe4');
@@ -67,10 +71,11 @@ const PUFF_COLOR = new Color('#f4efe4');
  * pop when planted, a pop-and-shrink with white puffs and debris when harvested, and a gentle sway.
  * Reads the latest state straight from the game loop, so animation does not depend on React renders.
  */
-export function Plants({ loop, worldSize }: { loop: GameLoop; worldSize: number }) {
+export function Plants({ loop, store, worldSize }: { loop: GameLoop; store: GameStore; worldSize: number }) {
   const meshRefs = useRef<Partial<Record<EntityType, InstancedMesh | null>>>({});
   const puffRef = useRef<InstancedMesh>(null);
   const debrisRef = useRef<InstancedMesh>(null);
+  const groupRef = useRef<Group>(null);
   const capacity = worldSize * worldSize + MAX_GHOSTS;
 
   const runtime = useRef({
@@ -80,6 +85,7 @@ export function Plants({ loop, worldSize }: { loop: GameLoop; worldSize: number 
     ghosts: [] as Ghost[],
     puffs: [] as Particle[],
     debris: [] as Particle[],
+    opacity: 1,
   });
 
   const resources = useMemo(
@@ -99,8 +105,12 @@ export function Plants({ loop, worldSize }: { loop: GameLoop; worldSize: number 
     [capacity],
   );
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const now = state.clock.elapsedTime;
+    // Crops fade out with the farm tiles while the view is in the mine.
+    const rtFade = runtime.current;
+    rtFade.opacity = fadeMaterial(resources.plantMaterial, rtFade.opacity, getFocusDepth(store, loop) > 0 ? 0 : 1, delta);
+    if (groupRef.current) groupRef.current.visible = rtFade.opacity > 0.01;
     const game: GameState = loop.getState();
     const rt = runtime.current;
     if (game.worldSize !== rt.lastWorldSize) {
@@ -118,7 +128,7 @@ export function Plants({ loop, worldSize }: { loop: GameLoop; worldSize: number 
   });
 
   return (
-    <group>
+    <group ref={groupRef}>
       {ENTITY_TYPES.map((type) => (
         <instancedMesh
           key={`${type}-${capacity}`}

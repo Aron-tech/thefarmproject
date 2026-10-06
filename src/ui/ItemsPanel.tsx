@@ -9,6 +9,15 @@ const ITEM_UNLOCKS: Record<ItemType, UnlockId | null> = {
   Wood: 'Plant',
   Carrot: 'Carrots',
   Power: 'Sunflowers',
+  Rice: 'Rice',
+  Stone: 'Mining',
+  Clay: 'Mining',
+  Coal: 'Mining',
+  Iron: 'Depth',
+  Quartz: 'Depth',
+  Gold: 'Depth',
+  Mushroom: 'Mushrooms',
+  Dynamite: 'Dynamite',
 };
 
 function isItemShown(game: GameState, item: ItemType): boolean {

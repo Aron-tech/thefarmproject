@@ -1,7 +1,7 @@
 import { DEFAULT_RNG_SEED, DEFAULT_WORLD_SIZE } from './constants.ts';
 import { createPlant } from './crops.ts';
 import { ITEM_TYPES, type Cell, type GameState, type Inventory, type UnlockLevels } from './types.ts';
-import { createLockedUnlocks } from './unlocks.ts';
+import { createLockedUnlocks, digMineLayers } from './unlocks.ts';
 
 export function createEmptyInventory(): Inventory {
   const inventory = {} as Inventory;
@@ -27,14 +27,15 @@ export function createGameState(
   unlocks: UnlockLevels = createLockedUnlocks(),
 ): GameState {
   const [cells, rngState] = createGrid(worldSize, 0, seed);
-  return {
+  return digMineLayers({
     worldSize,
     cells,
-    drone: { pos: { x: 0, y: 0 } },
+    mine: null,
+    drone: { pos: { x: 0, y: 0 }, depth: 0 },
     inventory: createEmptyInventory(),
     unlocks,
     poweredActions: 0,
     tick: 0,
     rngState,
-  };
+  });
 }

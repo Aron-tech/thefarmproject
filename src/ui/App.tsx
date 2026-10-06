@@ -6,6 +6,7 @@ import { CodeWindow } from './CodeWindow.tsx';
 import { FilesWindow } from './FilesWindow.tsx';
 import { GameContext, type GameServices } from './gameContext.ts';
 import { GuideWindow } from './GuideWindow.tsx';
+import { DepthControl } from './DepthControl.tsx';
 import { ItemsPanel } from './ItemsPanel.tsx';
 import { MainMenu } from './MainMenu.tsx';
 import { OutputWindow } from './OutputWindow.tsx';
@@ -60,6 +61,7 @@ export function App({ services }: { services: GameServices }) {
           <FarmScene store={store} loop={loop} />
         </div>
         <ItemsPanel />
+        <DepthControl />
         <Toolbar
           onNewFile={() => createCodeFile(store)}
           onToggleFiles={() => setFilesOpen((open) => !open)}

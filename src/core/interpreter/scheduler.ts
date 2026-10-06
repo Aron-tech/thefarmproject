@@ -255,7 +255,7 @@ export class ExecutionScheduler {
     const requestId = this.nextRequestId++;
     return new Promise((resolve) => {
       run.pendingRequest = { requestId, resolve };
-      this.host.post({ type: 'action', runId: run.id, requestId, action, ticks: run.ticks });
+      this.host.post({ type: 'action', runId: run.id, requestId, action, ticks: run.ticks, location: run.location });
     });
   }
 }

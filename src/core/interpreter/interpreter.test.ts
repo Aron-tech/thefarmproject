@@ -171,8 +171,8 @@ describe('scheduling', () => {
 });
 
 describe('game API', () => {
-  function runOnFarm(code: string, maxTicks?: number): { state: GameState; output: string[]; actions: DroneAction[] } {
-    let state = createGameState(3);
+  function runOnFarm(code: string, maxTicks?: number, start = createGameState(3)): { state: GameState; output: string[]; actions: DroneAction[] } {
+    let state = start;
     const actions: DroneAction[] = [];
     const result = runSync(code, {
       maxTicks,
@@ -206,6 +206,22 @@ describe('game API', () => {
     ].join('\n');
     const { state } = runOnFarm(code, 50_000);
     expect(state.inventory.Hay).toBeGreaterThan(10);
+  });
+
+  it('digs into the mine and reports blocks', () => {
+    const code = [
+      'dig(Down)',
+      'move(Down)',
+      'print(get_depth(), get_max_depth(), get_block_type(Up), get_block_type(Down) == None)',
+      'while not dig(East):',
+      '    pass',
+      'move(East)',
+      'print(get_pos_x(), get_block_type(West))',
+    ].join('\n');
+    const { output: lines, state } = runOnFarm(code, 50_000, createGameState(3, 5, createFullUnlocks()));
+    expect(lines[0]).toMatch(/^1 8 None False$/);
+    expect(lines[1]).toBe('1 Blocks.Air');
+    expect(state.cells[0]!.ground).toBe('Shaft');
   });
 
   it('validates argument types', () => {
@@ -302,6 +318,16 @@ describe('unlocks', () => {
     const withPlant = { ...locked, Plant: 1 };
     expect(lockedErrorOf('plant(Entities.Bush)', withPlant)).toBeNull();
     expect(lockedErrorOf('plant(Entities.Carrot)', withPlant)?.message).toMatch(/Entities\.Carrot.*Carrots/);
+  });
+
+  it('locks the mine until Mining is bought', () => {
+    const farmer = { ...createFullUnlocks(), Mining: 0, Scanner: 0, Dynamite: 0 };
+    expect(lockedErrorOf('move(Down)', farmer)?.message).toMatch(/Down.*Mining/);
+    expect(lockedErrorOf('dig(North)', farmer)?.message).toMatch(/dig.*Mining/);
+    const miner = { ...farmer, Mining: 1 };
+    expect(lockedErrorOf('dig(Down)\nprint(Items.Coal, Blocks.Stone)', miner)).toBeNull();
+    expect(lockedErrorOf('get_block_type(North)', miner)?.message).toMatch(/Scanner/);
+    expect(lockedErrorOf('defuse(North)', miner)?.message).toMatch(/Dynamite/);
   });
 
   it('lets player-defined names shadow locked builtins', () => {

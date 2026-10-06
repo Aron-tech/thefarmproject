@@ -1,4 +1,4 @@
-import type { Cell, Direction, GridPos } from './types.ts';
+import type { Cell, GridPos, PlanarDirection } from './types.ts';
 
 /** Wraps a coordinate onto the torus-shaped farm. */
 export function wrapCoord(value: number, worldSize: number): number {
@@ -17,17 +17,21 @@ export function getCell(cells: readonly Cell[], pos: GridPos, worldSize: number)
   return cell;
 }
 
-const DIRECTION_DELTAS: Record<Direction, GridPos> = {
+const DIRECTION_DELTAS: Record<PlanarDirection, GridPos> = {
   North: { x: 0, y: 1 },
   East: { x: 1, y: 0 },
   South: { x: 0, y: -1 },
   West: { x: -1, y: 0 },
 };
 
-export function stepPos(pos: GridPos, direction: Direction, worldSize: number): GridPos {
+export function stepPos(pos: GridPos, direction: PlanarDirection, worldSize: number): GridPos {
   const delta = DIRECTION_DELTAS[direction];
   return {
     x: wrapCoord(pos.x + delta.x, worldSize),
     y: wrapCoord(pos.y + delta.y, worldSize),
   };
+}
+
+export function isPlanarDirection(direction: string): direction is PlanarDirection {
+  return direction in DIRECTION_DELTAS;
 }

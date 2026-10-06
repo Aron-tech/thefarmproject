@@ -20,7 +20,7 @@ describe('createGameState', () => {
     const state = createGameState(3);
     expect(state.cells).toHaveLength(9);
     expect(state.cells.every((c) => c.ground === 'Grassland' && c.entity?.type === 'Grass')).toBe(true);
-    expect(state.inventory).toEqual({ Hay: 0, Wood: 0, Carrot: 0, Power: 0 });
+    expect(Object.values(state.inventory).every((amount) => amount === 0)).toBe(true);
   });
 
   it('randomises growth time deterministically within the variance', () => {
@@ -112,10 +112,10 @@ describe('plant', () => {
     const soil = run(state, [{ kind: 'till' }]);
     expect(applyAction(soil, { kind: 'plant', entity: 'Carrot' }, 0).result).toBe(false);
 
-    const rich = { ...soil, inventory: { Hay: 5, Wood: 5, Carrot: 0, Power: 0 } };
+    const rich = { ...soil, inventory: { ...soil.inventory, Hay: 5, Wood: 5 } };
     const { state: planted, result } = applyAction(rich, { kind: 'plant', entity: 'Carrot' }, 0);
     expect(result).toBe(true);
-    expect(planted.inventory).toEqual({ Hay: 4, Wood: 4, Carrot: 0, Power: 0 });
+    expect(planted.inventory).toMatchObject({ Hay: 4, Wood: 4, Carrot: 0, Power: 0 });
 
     const { state: harvested } = applyAction(planted, { kind: 'harvest' }, LATE);
     expect(harvested.inventory.Carrot).toBe(1);
@@ -138,7 +138,7 @@ describe('queries', () => {
 describe('clear', () => {
   it('resets the grid and drone position but keeps the inventory', () => {
     const messy = run(createGameState(3), [{ kind: 'till' }, { kind: 'move', direction: 'North' }]);
-    const withItems = { ...messy, inventory: { Hay: 3, Wood: 0, Carrot: 0, Power: 0 } };
+    const withItems = { ...messy, inventory: { ...messy.inventory, Hay: 3 } };
     const { state } = applyAction(withItems, { kind: 'clear' }, 10);
     expect(state.drone.pos).toEqual({ x: 0, y: 0 });
     expect(state.cells.every((c) => c.ground === 'Grassland' && c.entity?.type === 'Grass')).toBe(true);

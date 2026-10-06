@@ -1,4 +1,5 @@
 import {
+  BLOCK_TYPES,
   ENTITY_TYPES,
   GROUND_TYPES,
   ITEM_TYPES,
@@ -6,17 +7,20 @@ import {
   type Cell,
   type GameState,
   type Inventory,
+  type MineCell,
+  type MineState,
   type Plant,
   type UnlockLevels,
 } from './types.ts';
 import { createWorkspace, fileNameProblem, folderNameProblem, MAIN_FILE_ID, type CodeFile, type Workspace } from './codeFiles.ts';
-import { EXPAND_WORLD_SIZES, maxUnlockLevel } from './unlocks.ts';
+import { digMineLayers, EXPAND_WORLD_SIZES, MINE_LAYERS_BY_DEPTH, maxUnlockLevel } from './unlocks.ts';
 
 /**
  * Version 2 added unlocks and power (drone speed is no longer stored: it follows from the game state).
  * Version 3 replaced the single program with code files and folders.
+ * Version 4 added the mine below the farm and the drone's depth.
  */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const MAX_WORLD_SIZE = 32;
 
 export interface SaveData {
@@ -70,18 +74,43 @@ function readEnum<T extends string>(value: unknown, options: readonly T[], path:
   return value as T;
 }
 
+function readPlant(value: unknown, path: string): Plant | null {
+  if (value === null || value === undefined) return null;
+  const entity = readObject(value, path);
+  const plant: Plant = {
+    type: readEnum(entity.type, ENTITY_TYPES, `${path}.type`),
+    plantedAt: readNumber(entity.plantedAt, `${path}.plantedAt`),
+    growTicks: readNumber(entity.growTicks, `${path}.growTicks`, { min: 0 }),
+  };
+  if (entity.petals !== undefined) plant.petals = readNumber(entity.petals, `${path}.petals`, { integer: true, min: 0 });
+  if (entity.color !== undefined) plant.color = readNumber(entity.color, `${path}.color`, { integer: true, min: 0 });
+  return plant;
+}
+
 function readCell(value: unknown, path: string): Cell {
   const cell = readObject(value, path);
-  const ground = readEnum(cell.ground, GROUND_TYPES, `${path}.ground`);
-  if (cell.entity === null) return { ground, entity: null };
-  const entity = readObject(cell.entity, `${path}.entity`);
-  const plant: Plant = {
-    type: readEnum(entity.type, ENTITY_TYPES, `${path}.entity.type`),
-    plantedAt: readNumber(entity.plantedAt, `${path}.entity.plantedAt`, { min: 0 }),
-    growTicks: readNumber(entity.growTicks, `${path}.entity.growTicks`, { min: 0 }),
+  return { ground: readEnum(cell.ground, GROUND_TYPES, `${path}.ground`), entity: readPlant(cell.entity, `${path}.entity`) };
+}
+
+function readMineCell(value: unknown, path: string): MineCell {
+  const raw = readObject(value, path);
+  const cell: MineCell = {
+    block: readEnum(raw.block, BLOCK_TYPES, `${path}.block`),
+    damage: raw.damage === undefined ? 0 : readNumber(raw.damage, `${path}.damage`, { integer: true, min: 0 }),
+    entity: readPlant(raw.entity, `${path}.entity`),
   };
-  if (entity.petals !== undefined) plant.petals = readNumber(entity.petals, `${path}.entity.petals`, { integer: true, min: 0 });
-  return { ground, entity: plant };
+  if (raw.mine === true) cell.mine = true;
+  if (raw.ruin !== undefined) cell.ruin = readNumber(raw.ruin, `${path}.ruin`, { integer: true, min: 0 });
+  return cell;
+}
+
+function readMine(value: unknown, worldSize: number): MineState | null {
+  if (value === null || value === undefined) return null;
+  const mine = readObject(value, 'game.mine');
+  const layers = readNumber(mine.layers, 'game.mine.layers', { integer: true, min: 1, max: MINE_LAYERS_BY_DEPTH.at(-1)! });
+  const count = layers * worldSize * worldSize;
+  if (!Array.isArray(mine.cells) || mine.cells.length !== count) fail('game.mine.cells', `an array of ${count} cells`);
+  return { layers, cells: mine.cells.map((cell, i) => readMineCell(cell, `game.mine.cells[${i}]`)) };
 }
 
 function readInventory(value: unknown): Inventory {
@@ -108,7 +137,7 @@ function readUnlocks(value: unknown): UnlockLevels {
  */
 function legacyUnlocks(worldSize: number): UnlockLevels {
   const unlocks = {} as UnlockLevels;
-  for (const id of UNLOCK_IDS) unlocks[id] = 1;
+  for (const id of UNLOCK_IDS) unlocks[id] = UNLOCK_IDS.indexOf(id) < UNLOCK_IDS.indexOf('Mining') ? 1 : 0;
   unlocks.Speed = 0;
   unlocks.Sunflowers = 0;
   const expandLevel = EXPAND_WORLD_SIZES.findIndex((size) => size >= worldSize);
@@ -125,16 +154,20 @@ function readGameState(value: unknown, version: number): GameState {
   const drone = readObject(game.drone, 'game.drone');
   const pos = readObject(drone.pos, 'game.drone.pos');
   const coord = { integer: true, min: 0, max: worldSize - 1 };
-  return {
+  const mine = version >= 4 ? readMine(game.mine, worldSize) : null;
+  const depth = mine && drone.depth !== undefined ? readNumber(drone.depth, 'game.drone.depth', { integer: true, min: 0, max: mine.layers }) : 0;
+  // A save with Mining but fewer layers than its Depth level (or none) gets the missing layers.
+  return digMineLayers({
     worldSize,
     cells: game.cells.map((cell, i) => readCell(cell, `game.cells[${i}]`)),
-    drone: { pos: { x: readNumber(pos.x, 'game.drone.pos.x', coord), y: readNumber(pos.y, 'game.drone.pos.y', coord) } },
+    mine,
+    drone: { pos: { x: readNumber(pos.x, 'game.drone.pos.x', coord), y: readNumber(pos.y, 'game.drone.pos.y', coord) }, depth },
     inventory: readInventory(game.inventory),
     unlocks: version === 1 ? legacyUnlocks(worldSize) : readUnlocks(game.unlocks),
     poweredActions: version === 1 ? 0 : readNumber(game.poweredActions, 'game.poweredActions', { integer: true, min: 0 }),
     tick: readNumber(game.tick, 'game.tick', { min: 0 }),
     rngState: readNumber(game.rngState, 'game.rngState', { integer: true }),
-  };
+  });
 }
 
 function readWorkspace(value: unknown): Workspace {
@@ -166,11 +199,11 @@ function readWorkspace(value: unknown): Workspace {
 /** Validates untrusted save data (from storage or an imported file). Throws SaveFormatError when invalid. */
 export function parseSaveData(value: unknown): SaveData {
   const data = readObject(value, 'save');
-  if (data.version !== SAVE_VERSION && data.version !== 1 && data.version !== 2) {
+  if (data.version !== SAVE_VERSION && data.version !== 1 && data.version !== 2 && data.version !== 3) {
     throw new SaveFormatError(`Unsupported save version: ${String(data.version)} (expected ${SAVE_VERSION})`);
   }
   let workspace: Workspace;
-  if (data.version === SAVE_VERSION) {
+  if (data.version === SAVE_VERSION || data.version === 3) {
     workspace = readWorkspace(data.workspace);
   } else {
     // Older saves had a single program, which becomes the main file.
@@ -183,7 +216,6 @@ export function parseSaveData(value: unknown): SaveData {
     workspace,
     game: readGameState(data.game, data.version),
   };
-
 }
 
 export function parseSaveJson(text: string): SaveData {

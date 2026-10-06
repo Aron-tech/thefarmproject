@@ -28,7 +28,7 @@ interface PartTransform {
   scale?: [number, number, number];
 }
 
-function part(geometry: BufferGeometry, color: string, { position, rotation, scale }: PartTransform = {}): BufferGeometry {
+export function part(geometry: BufferGeometry, color: string, { position, rotation, scale }: PartTransform = {}): BufferGeometry {
   const prepared = geometry.index ? geometry.toNonIndexed() : geometry;
   prepared.deleteAttribute('uv');
   prepared.applyMatrix4(
@@ -50,14 +50,14 @@ function part(geometry: BufferGeometry, color: string, { position, rotation, sca
   return prepared;
 }
 
-function merge(parts: BufferGeometry[]): BufferGeometry {
+export function merge(parts: BufferGeometry[]): BufferGeometry {
   const merged = mergeGeometries(parts);
   if (!merged) throw new Error('Failed to merge model geometry');
   merged.computeVertexNormals();
   return merged;
 }
 
-function seededRandom(seed: number): () => number {
+export function seededRandom(seed: number): () => number {
   let state = seed;
   return () => {
     const [value, next] = nextRandom(state);
@@ -170,11 +170,73 @@ function createSunflower(): BufferGeometry {
   ]);
 }
 
+/** Rice: a 3×3 grid of tufts of thin leaves, each bending under drooping golden grain heads. */
+function createRice(): BufferGeometry {
+  const random = seededRandom(17);
+  const parts: BufferGeometry[] = [];
+  for (let row = -1; row <= 1; row++) {
+    for (let col = -1; col <= 1; col++) {
+      const cx = col * 0.27 + (random() - 0.5) * 0.05;
+      const cz = row * 0.27 + (random() - 0.5) * 0.05;
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2 + random();
+        const height = 0.3 + random() * 0.14;
+        const lean = 0.15 + random() * 0.2;
+        parts.push(
+          part(new CylinderGeometry(0.008, 0.016, height, 3, 1, true), i % 2 === 0 ? '#6f9a2c' : '#83ad38', {
+            position: [cx + Math.cos(angle) * lean * height * 0.5, height / 2, cz + Math.sin(angle) * lean * height * 0.5],
+            rotation: [Math.sin(angle) * lean, 0, -Math.cos(angle) * lean],
+          }),
+        );
+        if (i % 2 === 0) {
+          parts.push(
+            part(new CylinderGeometry(0.02, 0.008, 0.12, 4), '#e9c45a', {
+              position: [cx + Math.cos(angle) * 0.07, height - 0.02, cz + Math.sin(angle) * 0.07],
+              rotation: [Math.sin(angle) * 1.1, 0, -Math.cos(angle) * 1.1],
+            }),
+          );
+        }
+      }
+    }
+  }
+  return merge(parts);
+}
+
+/**
+ * Mushroom: a pale stem under a domed cap with spots. The cap is near-white so the instance colour
+ * paints it; the stem is darker so it stays a muted tone of the same colour.
+ */
+function createMushroom(): BufferGeometry {
+  const random = seededRandom(31);
+  const parts: BufferGeometry[] = [
+    part(new CylinderGeometry(0.06, 0.08, 0.26, 7), '#b8ad9a', { position: [0, 0.13, 0] }),
+    part(new SphereGeometry(0.22, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2), '#ffffff', { position: [0, 0.24, 0], scale: [1, 0.75, 1] }),
+    part(new CylinderGeometry(0.2, 0.2, 0.02, 9), '#8f8678', { position: [0, 0.245, 0] }),
+  ];
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2 + random() * 0.4;
+    const radius = 0.09 + random() * 0.06;
+    parts.push(
+      part(new SphereGeometry(0.028, 5, 3), '#fff8ea', {
+        position: [Math.cos(angle) * radius, 0.24 + Math.sqrt(Math.max(0, 0.22 ** 2 - radius ** 2)) * 0.75, Math.sin(angle) * radius],
+      }),
+    );
+  }
+  // A smaller second mushroom beside the first.
+  parts.push(
+    part(new CylinderGeometry(0.035, 0.045, 0.14, 6), '#b8ad9a', { position: [0.2, 0.07, 0.12] }),
+    part(new SphereGeometry(0.11, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), '#f2f2f2', { position: [0.2, 0.13, 0.12], scale: [1, 0.8, 1] }),
+  );
+  return merge(parts);
+}
+
 const PLANT_FACTORIES: Record<EntityType, () => BufferGeometry> = {
   Grass: createGrass,
   Bush: createBush,
   Carrot: createCarrot,
   Sunflower: createSunflower,
+  Rice: createRice,
+  Mushroom: createMushroom,
 };
 
 const plantCache = new Map<EntityType, BufferGeometry>();
@@ -194,6 +256,8 @@ export const PLANT_PARTICLE_COLORS: Record<EntityType, string> = {
   Bush: '#6c9124',
   Carrot: '#e8792a',
   Sunflower: '#f5c518',
+  Rice: '#e9c45a',
+  Mushroom: '#d8c9b0',
 };
 
 export function createPuffGeometry(): BufferGeometry {

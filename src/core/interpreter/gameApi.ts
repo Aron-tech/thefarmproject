@@ -1,4 +1,5 @@
 import {
+  BLOCK_TYPES,
   DIRECTIONS,
   ENTITY_TYPES,
   GROUND_TYPES,
@@ -25,6 +26,7 @@ const DIRECTION_VALUES = createEnumMap('Direction', DIRECTIONS, false);
 const ENTITY_VALUES = createEnumMap('Entities', ENTITY_TYPES, true);
 const GROUND_VALUES = createEnumMap('Grounds', GROUND_TYPES, true);
 const ITEM_VALUES = createEnumMap('Items', ITEM_TYPES, true);
+const BLOCK_VALUES = createEnumMap('Blocks', BLOCK_TYPES, true);
 
 function expectEnum<T extends string>(value: PyValue | undefined, group: string, fnName: string): T {
   if (!value || value.type !== 'enum' || value.group !== group) {
@@ -113,6 +115,32 @@ export function createGameBuiltins(): Map<string, PyValue> {
     const result = yield* requestAction({ kind: 'measure' });
     return result === null ? NONE : pyInt(asNumber(result));
   });
+  define('dig', 1, function* (args) {
+    const direction = expectEnum<Direction>(args[0], 'Direction', 'dig');
+    return pyBool((yield* requestAction({ kind: 'dig', direction })) === true);
+  });
+  define('defuse', 1, function* (args) {
+    const direction = expectEnum<Direction>(args[0], 'Direction', 'defuse');
+    return pyBool((yield* requestAction({ kind: 'defuse', direction })) === true);
+  });
+  define('swap', 1, function* (args) {
+    const direction = expectEnum<Direction>(args[0], 'Direction', 'swap');
+    return pyBool((yield* requestAction({ kind: 'swap', direction })) === true);
+  });
+  define('use_item', 1, function* (args) {
+    const item = expectEnum<ItemType>(args[0], 'Items', 'use_item');
+    return pyBool((yield* requestAction({ kind: 'useItem', item })) === true);
+  });
+  define('get_block_type', 1, function* (args) {
+    const direction = expectEnum<Direction>(args[0], 'Direction', 'get_block_type');
+    return enumResult(BLOCK_VALUES, yield* requestAction({ kind: 'getBlockType', direction }));
+  });
+  define('get_depth', 0, function* () {
+    return pyInt(asNumber(yield* requestAction({ kind: 'getDepth' })));
+  });
+  define('get_max_depth', 0, function* () {
+    return pyInt(asNumber(yield* requestAction({ kind: 'getMaxDepth' })));
+  });
   builtins.set(
     'get_tick_count',
     pyBuiltin('get_tick_count', (args, _kwargs, ctx) => {
@@ -125,5 +153,6 @@ export function createGameBuiltins(): Map<string, PyValue> {
   builtins.set('Entities', { type: 'namespace', name: 'Entities', members: ENTITY_VALUES });
   builtins.set('Grounds', { type: 'namespace', name: 'Grounds', members: GROUND_VALUES });
   builtins.set('Items', { type: 'namespace', name: 'Items', members: ITEM_VALUES });
+  builtins.set('Blocks', { type: 'namespace', name: 'Blocks', members: BLOCK_VALUES });
   return builtins;
 }

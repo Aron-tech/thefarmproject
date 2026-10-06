@@ -5,6 +5,7 @@ import {
   canBuyUnlock,
   isUnlockVisible,
   maxUnlockLevel,
+  MINE_TREE_FIRST_ROW,
   nextUnlockCost,
   UNLOCK_DEFS,
   type ItemCost,
@@ -21,7 +22,9 @@ const ROW_GAP = 22;
 const nodeLeft = (id: UnlockId) => UNLOCK_DEFS[id].treePos.col * (NODE_WIDTH + COLUMN_GAP);
 const nodeTop = (id: UnlockId) => UNLOCK_DEFS[id].treePos.row * (NODE_HEIGHT + ROW_GAP);
 const TREE_WIDTH = Math.max(...UNLOCK_IDS.map(nodeLeft)) + NODE_WIDTH;
-const TREE_HEIGHT = Math.max(...UNLOCK_IDS.map(nodeTop)) + NODE_HEIGHT;
+const isMineUnlock = (id: UnlockId) => UNLOCK_DEFS[id].treePos.row >= MINE_TREE_FIRST_ROW;
+/** The mine section's title sits in the empty row above its first row. */
+const SECTION_TOP = (MINE_TREE_FIRST_ROW - 1) * (NODE_HEIGHT + ROW_GAP) + NODE_HEIGHT / 2;
 
 function CostList({ cost, affordable }: { cost: ItemCost; affordable: (item: ItemType, amount: number) => boolean }) {
   return (
@@ -46,6 +49,8 @@ export function UnlockTree({ onClose }: { onClose: () => void }) {
   const [hovered, setHovered] = useState<UnlockId | null>(null);
   const visible = UNLOCK_IDS.filter((id) => isUnlockVisible(game.unlocks, id));
   const described = hovered ?? visible.find((id) => canBuyUnlock(game, id)) ?? null;
+  const showMine = visible.some(isMineUnlock);
+  const treeHeight = Math.max(...visible.map(nodeTop)) + NODE_HEIGHT;
 
   return (
     <div className="absolute inset-0 z-[40] flex items-center justify-center bg-black/35 p-4" onPointerDown={onClose}>
@@ -63,10 +68,17 @@ export function UnlockTree({ onClose }: { onClose: () => void }) {
         </div>
         <div className="farm-window-body flex min-h-0 flex-col">
           <div className="min-h-0 overflow-auto p-5">
-            <div className="relative" style={{ width: TREE_WIDTH, height: TREE_HEIGHT }}>
-              <svg className="pointer-events-none absolute inset-0" width={TREE_WIDTH} height={TREE_HEIGHT} aria-hidden>
+            <div className="relative" style={{ width: TREE_WIDTH, height: treeHeight }}>
+              {showMine && (
+                <div className="farm-unlock-section absolute right-0 left-0 flex items-center gap-3" style={{ top: SECTION_TOP - 12 }}>
+                  <span>The Miner Was Replaced</span>
+                  <span className="h-px flex-1 bg-[#5a5a5a]" />
+                </div>
+              )}
+              <svg className="pointer-events-none absolute inset-0" width={TREE_WIDTH} height={treeHeight} aria-hidden>
                 {visible.flatMap((id) =>
-                  UNLOCK_DEFS[id].parents.map((parent) => {
+                  // Links into the mine section from the farm tree are implied by the section itself.
+                  UNLOCK_DEFS[id].parents.filter((parent) => isMineUnlock(parent) === isMineUnlock(id)).map((parent) => {
                     const x1 = nodeLeft(parent) + NODE_WIDTH;
                     const y1 = nodeTop(parent) + NODE_HEIGHT / 2;
                     const x2 = nodeLeft(id);

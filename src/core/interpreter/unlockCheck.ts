@@ -1,4 +1,4 @@
-import type { UnlockId, UnlockLevels } from '../state/types.ts';
+import { BLOCK_TYPES, type UnlockId, type UnlockLevels } from '../state/types.ts';
 import type { Comprehension, Expr, Module, Param, Slice, Stmt } from './ast.ts';
 import { PyError } from './errors.ts';
 
@@ -23,6 +23,15 @@ export const BUILTIN_UNLOCKS: Readonly<Record<string, UnlockId>> = {
   quick_print: 'Debug',
   get_tick_count: 'Debug',
   measure: 'Sunflowers',
+  dig: 'Mining',
+  Up: 'Mining',
+  Down: 'Mining',
+  get_depth: 'Mining',
+  get_max_depth: 'Mining',
+  use_item: 'Mining',
+  get_block_type: 'Scanner',
+  swap: 'Mushrooms',
+  defuse: 'Dynamite',
   abs: 'Operators',
   pow: 'Operators',
   round: 'Operators',
@@ -55,6 +64,20 @@ const MEMBER_UNLOCKS: Readonly<Record<string, UnlockId>> = {
   'Items.Wood': 'Plant',
   'Items.Carrot': 'Carrots',
   'Items.Power': 'Sunflowers',
+  'Entities.Rice': 'Rice',
+  'Entities.Mushroom': 'Mushrooms',
+  'Grounds.Clay': 'Rice',
+  'Grounds.Shaft': 'Mining',
+  'Items.Rice': 'Rice',
+  'Items.Stone': 'Mining',
+  'Items.Clay': 'Mining',
+  'Items.Coal': 'Mining',
+  'Items.Iron': 'Mining',
+  'Items.Quartz': 'Mining',
+  'Items.Gold': 'Mining',
+  'Items.Mushroom': 'Mining',
+  'Items.Dynamite': 'Mining',
+  ...Object.fromEntries(BLOCK_TYPES.map((block) => [`Blocks.${block}`, 'Mining'])),
 };
 
 const STATEMENT_UNLOCKS: Partial<Record<Stmt['kind'], [label: string, unlock: UnlockId]>> = {

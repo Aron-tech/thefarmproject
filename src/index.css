@@ -385,3 +385,51 @@ body,
   background: rgb(255 255 255 / 0.06);
   border-radius: 2px;
 }
+
+.farm-unlock-section {
+  color: #e8c46a;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  height: 24px;
+}
+
+.farm-depth-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: rgba(28, 28, 28, 0.82);
+  border: 1px solid #444;
+  color: #d6d3d1;
+  font-size: 12px;
+  font-weight: 700;
+}
+.farm-depth-button:hover {
+  background: rgba(55, 55, 55, 0.9);
+}
+.farm-depth-button-active {
+  border-color: #6f9216;
+  color: #c8e27a;
+}
+.farm-depth-button-focus {
+  background: #6f9216;
+  border-color: #8db52a;
+  color: #fff;
+}
+.farm-depth-drone {
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: #f0a943;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6);
+}

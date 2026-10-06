@@ -3,7 +3,7 @@ import { applyAction } from './actions.ts';
 import { addFile, addFolder, createWorkspace, moveFileToFolder, renameFile } from './codeFiles.ts';
 import { createGameState } from './gameState.ts';
 import { createSaveData, parseSaveJson, SaveFormatError, serializeSave } from './save.ts';
-import { buyUnlock } from './unlocks.ts';
+import { buyUnlock, createFullUnlocks } from './unlocks.ts';
 
 describe('save data', () => {
   it('round-trips through JSON', () => {
@@ -27,6 +27,27 @@ describe('save data', () => {
     expect(parsed.cells[0]!.entity?.petals).toBe(9);
   });
 
+  it('keeps the mine and the drone depth', () => {
+    const game = createGameState(5, 3, createFullUnlocks());
+    const dug = applyAction(applyAction(game, { kind: 'dig', direction: 'Down' }, 0).state, { kind: 'move', direction: 'Down' }, 0).state;
+    expect(dug.drone.depth).toBe(1);
+    const data = createSaveData(dug, createWorkspace(''));
+    const parsed = parseSaveJson(serializeSave(data));
+    expect(parsed).toEqual(data);
+    expect(parsed.game.mine?.layers).toBe(8);
+  });
+
+  it('loads version 3 saves without a mine', () => {
+    const data = JSON.parse(serializeSave(createSaveData(createGameState(3), createWorkspace('harvest()'))));
+    data.version = 3;
+    delete data.game.mine;
+    delete data.game.drone.depth;
+    const parsed = parseSaveJson(JSON.stringify(data));
+    expect(parsed.game.mine).toBeNull();
+    expect(parsed.game.drone.depth).toBe(0);
+    expect(parsed.workspace.files[0]!.code).toBe('harvest()');
+  });
+
   it('fills in missing inventory items and unlocks with zero', () => {
     const data = JSON.parse(serializeSave(createSaveData(createGameState(3), createWorkspace(''))));
     delete data.game.inventory.Carrot;
@@ -42,7 +63,7 @@ describe('save data', () => {
     delete current.game.poweredActions;
     const legacy = { version: 1, savedAt: current.savedAt, code: 'while True:\n    harvest()', speed: 1000, game: current.game };
     const parsed = parseSaveJson(JSON.stringify(legacy));
-    expect(parsed.version).toBe(3);
+    expect(parsed.version).toBe(4);
     expect(parsed.workspace).toEqual(createWorkspace('while True:\n    harvest()'));
     expect(parsed.game.worldSize).toBe(5);
     expect(parsed.game.unlocks).toMatchObject({ Loops: 1, Senses: 1, Variables: 1, Carrots: 1, Expand: 3, Speed: 0, Sunflowers: 0 });

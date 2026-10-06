@@ -1,6 +1,6 @@
 import type { InterpreterClient } from '../core/interpreter/client.ts';
 import type { BreakpointMap, CodeLocation, OpsPerSecond, WorkerToMainMessage } from '../core/interpreter/protocol.ts';
-import { applyAction } from '../core/state/actions.ts';
+import { applyAction, type ActionEvent } from '../core/state/actions.ts';
 import { findFile, findFileByName, MAIN_FILE_ID, setFileBreakpoints, setFileWindow, workspaceSources, type Workspace } from '../core/state/codeFiles.ts';
 import { GAME_TICKS_PER_SECOND } from '../core/state/constants.ts';
 import type { ActionResult, DroneAction, GameState, UnlockId } from '../core/state/types.ts';
@@ -19,7 +19,7 @@ const MAX_CLOCK_STEP_MS = 5000;
 
 /** Things that happened in the world, for animations and effects. */
 export type GameEvent =
-  | { type: 'action'; action: DroneAction; result: ActionResult; before: GameState; after: GameState }
+  | { type: 'action'; action: DroneAction; result: ActionResult; before: GameState; after: GameState; event?: ActionEvent }
   | { type: 'print'; text: string };
 
 export type FlushScheduler = (flush: () => void) => void;
@@ -201,7 +201,8 @@ export class GameLoop {
         this.state = outcome.state;
         this.syncSpeed();
         this.client.respondToAction(message.runId, message.requestId, outcome.result);
-        this.emit({ type: 'action', action: message.action, result: outcome.result, before, after: outcome.state });
+        this.emit({ type: 'action', action: message.action, result: outcome.result, before, after: outcome.state, event: outcome.event });
+        if (outcome.event === 'explosion') this.blownUp(message.location);
         this.scheduleUpdate();
         return;
       }
@@ -232,6 +233,21 @@ export class GameLoop {
         this.patch({ runStatus: 'idle', currentLocation: null, variables: null }, true);
         return;
     }
+  }
+
+  /** Digging into a mine ends the program with an error at the line that did it. */
+  private blownUp(location: CodeLocation): void {
+    this.client.stop();
+    const where = ` (${location.file === this.runningFileName() ? `line ${location.line}` : `${location.file}, line ${location.line}`})`;
+    const message = `DroneDestroyed: the drone dug into a mine and was blown up!${where}`;
+    this.log('error', message);
+    this.revealFile(location);
+    this.patch({ runStatus: 'idle', currentLocation: null, lastError: { message, location }, variables: null }, true);
+  }
+
+  private runningFileName(): string | null {
+    const { workspace, runningFileId } = this.store.getState();
+    return runningFileId ? (findFile(workspace, runningFileId)?.name ?? null) : null;
   }
 
   private advanceClock(): void {

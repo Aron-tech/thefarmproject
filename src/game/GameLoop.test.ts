@@ -152,6 +152,18 @@ describe('GameLoop', () => {
   });
 
 
+  it('stops the program when the drone digs into a mine', async () => {
+    const game = createGameState(3, undefined, createFullUnlocks());
+    const cells = game.mine!.cells.slice();
+    cells[0] = { block: 'Stone', damage: 0, entity: null, mine: true };
+    const { loop, store } = setup('do_a_flip()\ndig(Down)\ndo_a_flip()', null, { game: { ...game, mine: { ...game.mine!, cells } } });
+    loop.run();
+    await waitFor(() => store.getState().runStatus === 'idle');
+    expect(store.getState().lastError?.location).toEqual({ file: 'main', line: 2 });
+    expect(store.getState().console.at(-1)?.text).toMatch(/blown up! \(line 2\)$/);
+    expect(loop.getState().mine!.cells[0]!.mine).not.toBe(true);
+  });
+
   describe('code files', () => {
     /** Adds a closed file named `name` to the store's workspace. */
     function addCodeFile(store: GameStore, name: string, code: string): void {

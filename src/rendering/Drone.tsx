@@ -1,12 +1,20 @@
 import { Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MathUtils, MeshStandardMaterial, Vector3, type Group } from 'three';
+import { MathUtils, MeshStandardMaterial, Vector3, type Group, type PointLight } from 'three';
 import type { GameLoop } from '../game/GameLoop.ts';
-import { cellToWorld } from './layout.ts';
+import { cellToWorld, layerFloor } from './layout.ts';
 import { createDroneBody, createRotor, createStrawHat, DRONE_ROTOR_DISTANCE } from './models.ts';
 
 const HOVER_HEIGHT = 1.05;
+/** In the mine the drone shrinks to fit a block-sized tunnel and flies in the middle of it. */
+const MINE_SCALE = 0.5;
+const MINE_HOVER = 0.48;
+const DEPTH_LAMBDA = 9;
+
+function baseHeight(depth: number): number {
+  return depth === 0 ? HOVER_HEIGHT : layerFloor(depth) + MINE_HOVER;
+}
 const FOLLOW_LAMBDA = 14;
 /** Moves longer than this (wrap-around at the field edge) teleport instead of gliding across the field. */
 const SNAP_DISTANCE = 1.5;
@@ -29,6 +37,8 @@ export function Drone({ loop }: { loop: GameLoop }) {
   const rotorRefs = useRef<(Group | null)[]>([]);
   const animation = useRef({ flipStart: -Infinity, dipStart: -Infinity, pendingFlip: false, pendingDip: false });
   const lastPosition = useRef(new Vector3());
+  const lampRef = useRef<PointLight>(null);
+  const vertical = useRef({ base: HOVER_HEIGHT, scale: 1 });
   const [bubble, setBubble] = useState<{ id: number; text: string } | null>(null);
 
   const geometries = useMemo(() => ({ body: createDroneBody(), hat: createStrawHat(), rotor: createRotor() }), []);
@@ -44,7 +54,8 @@ export function Drone({ loop }: { loop: GameLoop }) {
       }
       const kind = event.action.kind;
       if (kind === 'doAFlip') animation.current.pendingFlip = true;
-      else if (kind === 'harvest' || kind === 'plant' || kind === 'till') animation.current.pendingDip = true;
+      else if (kind === 'harvest' || kind === 'plant' || kind === 'till' || kind === 'dig' || kind === 'defuse' || kind === 'swap')
+        animation.current.pendingDip = true;
     });
   }, [loop]);
 
@@ -90,7 +101,14 @@ export function Drone({ loop }: { loop: GameLoop }) {
     const targetRoll = MathUtils.clamp(-vx * 0.12, -MAX_TILT, MAX_TILT);
     tilt.rotation.z = MathUtils.damp(tilt.rotation.z, targetRoll, 10, delta);
 
-    let height = HOVER_HEIGHT + Math.sin(now * 2.6) * 0.05;
+    const v = vertical.current;
+    v.base = MathUtils.damp(v.base, baseHeight(drone.depth), DEPTH_LAMBDA, delta);
+    v.scale = MathUtils.damp(v.scale, drone.depth === 0 ? 1 : MINE_SCALE, DEPTH_LAMBDA, delta);
+    root.scale.setScalar(v.scale);
+    const lamp = lampRef.current;
+    if (lamp) lamp.intensity = MathUtils.damp(lamp.intensity, drone.depth === 0 ? 0 : 6, DEPTH_LAMBDA, delta);
+
+    let height = v.base + Math.sin(now * 2.6) * 0.05 * v.scale;
     let pitch = MathUtils.damp(tilt.rotation.x % (Math.PI * 2), targetPitch, 10, delta);
 
     const flipT = (now - anim.flipStart) / FLIP_DURATION;
@@ -99,7 +117,7 @@ export function Drone({ loop }: { loop: GameLoop }) {
       height += Math.sin(Math.PI * flipT) * 0.55;
     }
     const dipT = (now - anim.dipStart) / DIP_DURATION;
-    if (dipT >= 0 && dipT < 1) height -= Math.sin(Math.PI * dipT) * 0.28;
+    if (dipT >= 0 && dipT < 1) height -= Math.sin(Math.PI * dipT) * 0.28 * v.scale;
 
     tilt.rotation.x = pitch;
     root.position.y = height;
@@ -110,6 +128,7 @@ export function Drone({ loop }: { loop: GameLoop }) {
 
   return (
     <group ref={rootRef} position={[0, HOVER_HEIGHT, 0]}>
+      <pointLight ref={lampRef} color="#ffd59a" intensity={0} distance={3.5} decay={1.6} position={[0, -0.4, 0]} />
       <group ref={tiltRef}>
         <mesh geometry={geometries.body} material={material} castShadow />
         <mesh geometry={geometries.hat} material={material} position={[0, 0.03, 0]} castShadow />

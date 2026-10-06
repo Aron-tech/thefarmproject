@@ -69,12 +69,99 @@ function drawSoil(ctx: CanvasRenderingContext2D, random: () => number): void {
   }
 }
 
-let cache: { grassland: Texture; soil: Texture } | null = null;
+/** Clay tile top: smooth reddish-brown, slightly glossy patches and a few dry cracks. */
+function drawClay(ctx: CanvasRenderingContext2D, random: () => number): void {
+  const size = TEXTURE_SIZE;
+  ctx.fillStyle = '#b0684a';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 60; i++) {
+    ctx.fillStyle = random() < 0.5 ? 'rgba(150, 80, 55, 0.25)' : 'rgba(205, 140, 105, 0.22)';
+    ctx.beginPath();
+    ctx.arc(random() * size, random() * size, 10 + random() * 30, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(95, 48, 30, 0.55)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 9; i++) {
+    let x = random() * size;
+    let y = random() * size;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let j = 0; j < 4; j++) {
+      x += (random() - 0.5) * 60;
+      y += (random() - 0.5) * 60;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
 
-export function getGroundTextures(): { grassland: Texture; soil: Texture } {
+/** Shaft tile top: a dark square hole framed by wooden planks, with a ladder going down. */
+function drawShaft(ctx: CanvasRenderingContext2D, random: () => number): void {
+  const size = TEXTURE_SIZE;
+  const rim = 34;
+  ctx.fillStyle = '#7a5530';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 4; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#8d6338' : '#6c4a28';
+    ctx.fillRect(0, (i * size) / 4, size, 3);
+  }
+  const hole = ctx.createRadialGradient(size / 2, size / 2, 10, size / 2, size / 2, size / 2);
+  hole.addColorStop(0, '#0b0806');
+  hole.addColorStop(1, '#2a1b10');
+  ctx.fillStyle = hole;
+  ctx.fillRect(rim, rim, size - rim * 2, size - rim * 2);
+  ctx.fillStyle = '#9b7444';
+  ctx.fillRect(size / 2 - 40, rim, 8, size - rim * 2);
+  ctx.fillRect(size / 2 + 32, rim, 8, size - rim * 2);
+  for (let y = rim + 16; y < size - rim; y += 30) ctx.fillRect(size / 2 - 40, y, 80, 6);
+  for (let i = 0; i < 120; i++) {
+    ctx.fillStyle = `rgba(40, 25, 12, ${0.2 + random() * 0.3})`;
+    ctx.fillRect(random() * size, random() * size, 2, 2);
+  }
+}
+
+export interface GroundTextures {
+  grassland: Texture;
+  soil: Texture;
+  clay: Texture;
+  shaft: Texture;
+}
+
+let cache: GroundTextures | null = null;
+
+export function getGroundTextures(): GroundTextures {
   cache ??= {
     grassland: createCanvasTexture(drawGrassland, 11),
     soil: createCanvasTexture(drawSoil, 23),
+    clay: createCanvasTexture(drawClay, 37),
+    shaft: createCanvasTexture(drawShaft, 41),
   };
   return cache;
+}
+
+/** Minesweeper digits, coloured like the classic game. */
+const DIGIT_COLORS = ['', '#2f6fe0', '#2e8a2e', '#d33a2c', '#1d2f8a', '#8a2a1d', '#1d8a8a', '#222222', '#777777'];
+
+let digitCache: Texture[] | null = null;
+
+/** Textures for the numbers 1–8 shown on dug-out minefield cells (index = number). */
+export function getDigitTextures(): Texture[] {
+  digitCache ??= DIGIT_COLORS.map((color, digit) =>
+    createCanvasTexture((ctx) => {
+      const size = TEXTURE_SIZE;
+      ctx.clearRect(0, 0, size, size);
+      if (digit === 0) return;
+      ctx.fillStyle = 'rgba(235, 225, 205, 0.85)';
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size * 0.36, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = color;
+      ctx.font = `bold ${size * 0.55}px "Trebuchet MS", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(digit), size / 2, size / 2 + size * 0.03);
+    }, digit),
+  );
+  return digitCache;
 }

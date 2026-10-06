@@ -35,6 +35,8 @@ export interface GameStoreState {
   lastError: RunError | null;
   variables: VariableSnapshot | null;
   console: ConsoleEntry[];
+  /** Mine layer the view centres on (0 = the farm); null follows the drone. */
+  viewDepth: number | null;
 }
 
 export type GameStore = StoreApi<GameStoreState>;
@@ -70,5 +72,6 @@ export function createGameStore({ game, workspace = createWorkspace(DEFAULT_CODE
     lastError: null,
     variables: null,
     console: [],
+    viewDepth: null,
   }));
 }

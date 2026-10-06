@@ -1,6 +1,14 @@
 import {
   ACTIONS_PER_POWER,
+  BLOCK_DEFS,
+  COAL_POWER,
   CROP_DEFS,
+  DYNAMITE_YIELD_FRACTION,
+  EXPLOSION_DYNAMITE_LOSS,
+  MUSHROOM_COLORS,
+  RUIN_GOLD_PER_BLOCK,
+  RUIN_MAX_SIZE,
+  RUIN_MIN_SIZE,
   POWER_SPEED_MULTIPLIER,
   SUNFLOWER_BONUS_MIN_COUNT,
   SUNFLOWER_BONUS_MULTIPLIER,
@@ -8,7 +16,7 @@ import {
   SUNFLOWER_MIN_PETALS,
 } from '../core/state/constants.ts';
 import type { UnlockId } from '../core/state/types.ts';
-import { EXPAND_WORLD_SIZES } from '../core/state/unlocks.ts';
+import { EXPAND_WORLD_SIZES, MINE_LAYERS_BY_DEPTH } from '../core/state/unlocks.ts';
 
 /**
  * Guide pages, like the game's info window. A page appears once its unlock is bought (null: from the start).
@@ -32,6 +40,16 @@ const code = (value: string): GuideBlock => ({ kind: 'code', code: value });
 const entry = (signature: string, description: string): GuideBlock => ({ kind: 'entry', signature, text: description });
 
 const seconds = (ticks: number) => `${ticks / 1000} s`;
+
+const MINED_BLOCKS = ['Dirt', 'Clay', 'Coal', 'Stone', 'Iron', 'Quartz'] as const;
+const BLOCK_NOTES: Record<(typeof MINED_BLOCKS)[number], string> = {
+  Dirt: 'Gives nothing.',
+  Clay: 'Gives clay.',
+  Coal: 'Gives coal.',
+  Stone: 'Gives stone.',
+  Iron: 'Gives iron.',
+  Quartz: 'Gives quartz.',
+};
 
 export const GUIDE_TOPICS: readonly GuideTopic[] = [
   {
@@ -224,4 +242,98 @@ export const GUIDE_TOPICS: readonly GuideTopic[] = [
       text(`While you have power, the drone is ${POWER_SPEED_MULTIPLIER}× faster. One power lasts ${ACTIONS_PER_POWER} drone actions.`),
     ],
   },
+  {
+    id: 'mining',
+    title: 'The mine',
+    unlock: 'Mining',
+    blocks: [
+      text(
+        `Below the farm lie layers of earth and rock: ${MINE_LAYERS_BY_DEPTH[0]} at first, up to ${MINE_LAYERS_BY_DEPTH.at(-1)} with the Depth upgrade. Every cell of a layer is a block, until the drone digs it out.`,
+      ),
+      entry('dig(direction)', 'Hits the block next to the drone in that direction (`North`, `East`, `South`, `West`, `Up` or `Down`). Returns `True` when the block breaks; its items go to your inventory. From the farm you can only dig `Down`.'),
+      entry('move(Down) / move(Up)', 'Moves the drone into the dug-out cell below or above. In the mine the drone can only move into dug-out cells; `move` returns `False` otherwise. Layers wrap around at the edges like the farm.'),
+      entry('get_depth()', 'The drone\'s layer: 0 on the farm, 1 for the first mine layer and so on.'),
+      entry('get_max_depth()', 'The number of mine layers.'),
+      text('Digging down from the farm leaves a shaft: nothing grows there until `clear()` in the first layer fills it in again.'),
+      entry('clear()', 'In the mine, refills the drone\'s whole layer with fresh blocks and lifts the drone back to the farm, so the ores never run out.'),
+      code('dig(Down)\nmove(Down)\nwhile not dig(East):\n    pass\nmove(East)'),
+    ],
+  },
+  {
+    id: 'blocks',
+    title: 'Blocks and the drill',
+    unlock: 'Mining',
+    blocks: [
+      text('Harder blocks need several hits before they break. Each Drill level takes one hit off (at least one hit is always needed).'),
+      ...MINED_BLOCKS.map((block) => entry(`Blocks.${block}`, `${BLOCK_DEFS[block].hardness} ${BLOCK_DEFS[block].hardness === 1 ? 'hit' : 'hits'}. ${BLOCK_NOTES[block]}`)),
+      text('The upper layers are mostly dirt, clay and coal; stone, iron and quartz lie deeper down.'),
+      code('def dig_through(direction):\n    while not dig(direction):\n        pass'),
+    ],
+  },
+  {
+    id: 'scanner',
+    title: 'Scanner',
+    unlock: 'Scanner',
+    blocks: [
+      entry('get_block_type(direction)', 'The block next to the drone, e.g. `Blocks.Coal`, or `Blocks.Air` for a dug-out cell; `None` if there is nothing in that direction.'),
+      code('for direction in [North, East, South, West]:\n    if get_block_type(direction) == Blocks.Coal:\n        dig(direction)'),
+    ],
+  },
+  {
+    id: 'coal',
+    title: 'Coal power',
+    unlock: 'Coal',
+    blocks: [
+      entry('use_item(item)', 'Uses one of an item. Returns `True` if it worked.'),
+      text(`\`use_item(Items.Coal)\` burns a coal for ${COAL_POWER} power, a second way to power the drone besides sunflowers.`),
+      code('while num_items(Items.Power) < 10 and num_items(Items.Coal) > 0:\n    use_item(Items.Coal)'),
+    ],
+  },
+  {
+    id: 'rice',
+    title: 'Clay and rice',
+    unlock: 'Rice',
+    blocks: [
+      text('`use_item(Items.Clay)` turns the farm tile below the drone into clay ground (`Grounds.Clay`).'),
+      text(`Rice (\`Entities.Rice\`) only grows on clay. It takes about ${seconds(CROP_DEFS.Rice.baseGrowTicks)} and costs ${CROP_DEFS.Rice.plantCost.Hay} Hay.`),
+      code('use_item(Items.Clay)\nplant(Entities.Rice)'),
+    ],
+  },
+  {
+    id: 'mushrooms',
+    title: 'Mushroom sorting',
+    unlock: 'Mushrooms',
+    blocks: [
+      text(`Mushrooms grow in dug-out cells of the mine. The third layer has caves full of them. Each one has a colour from 0 to ${MUSHROOM_COLORS - 1}.`),
+      entry('measure()', 'In the mine: the colour of the mushroom at the drone.'),
+      entry('swap(direction)', 'Swaps the mushroom at the drone with the one next to it.'),
+      text('Harvesting a ripe mushroom also harvests every ripe mushroom connected to it, if the whole group is sorted: colours never get smaller going East or North. A sorted group of n mushrooms gives n² mushrooms; otherwise you get just one.'),
+      text(`\`plant(Entities.Mushroom)\` plants one in a dug-out cell for ${CROP_DEFS.Mushroom.plantCost.Mushroom} mushroom.`),
+      code('# one pass of bubble sort along a row, moving East\nfor i in range(get_world_size() - 1):\n    here = measure()\n    move(East)\n    if measure() < here:\n        swap(West)'),
+    ],
+  },
+  {
+    id: 'minefield',
+    title: 'Minesweeper and dynamite',
+    unlock: 'Dynamite',
+    blocks: [
+      text('The minefield layer hides mines in the rock. They look exactly like stone, even to `get_block_type`. The cells around the corner at (0, 0) are always safe.'),
+      entry('measure()', 'In a dug-out minefield cell: how many of the 8 cells around it (on the same layer) hold a mine.'),
+      entry('defuse(direction)', 'Removes the mine next to the drone and keeps it as dynamite. Returns `False` (and wastes the time) if there is no mine.'),
+      text(`Digging into a mine blows the drone up: your program stops with an error, the drone lands back on the farm, the layer is rebuilt and you lose ${EXPLOSION_DYNAMITE_LOSS * 100}% of your dynamite.`),
+      text(`\`use_item(Items.Dynamite)\` blows up the 3×3×3 blocks around the drone. You only get ${DYNAMITE_YIELD_FRACTION * 100}% of their items, and it damages ruins.`),
+      code('if measure() == 0:\n    for direction in [North, East, South, West]:\n        dig(direction)'),
+    ],
+  },
+  {
+    id: 'ruins',
+    title: 'Ruins',
+    unlock: 'Depth',
+    blocks: [
+      text(`Deep layers hold ancient ruins: groups of ${RUIN_MIN_SIZE}–${RUIN_MAX_SIZE} carved sandstone blocks (\`Blocks.Ruin\`).`),
+      text(`Dig out every block around a ruin (on its layer, and above and below it) to excavate it. A ruin of n blocks gives ${RUIN_GOLD_PER_BLOCK}×n² gold.`),
+      text('Never dig into a ruin block, and keep dynamite away: a damaged ruin crumbles to worthless rubble.'),
+    ],
+  },
 ];
+
