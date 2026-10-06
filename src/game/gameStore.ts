@@ -1,6 +1,7 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { VariableSnapshot } from '../core/interpreter/evaluator.ts';
-import type { OpsPerSecond } from '../core/interpreter/protocol.ts';
+import type { CodeLocation } from '../core/interpreter/protocol.ts';
+import { addFile, createWorkspace, MAIN_FILE_ID, type Workspace } from '../core/state/codeFiles.ts';
 import type { GameState } from '../core/state/types.ts';
 
 export type RunStatus = 'idle' | 'running' | 'paused';
@@ -13,41 +14,24 @@ export interface ConsoleEntry {
 
 export interface RunError {
   message: string;
-  line: number | null;
+  /** Where it happened, by file name; null when the error has no position. */
+  location: CodeLocation | null;
 }
 
-export interface SpeedPreset {
-  label: string;
-  opsPerSecond: OpsPerSecond;
-}
-
-export const BASE_OPS_PER_SECOND = 1000;
-
-export const SPEED_PRESETS: readonly SpeedPreset[] = [
-  { label: '1×', opsPerSecond: BASE_OPS_PER_SECOND },
-  { label: '2×', opsPerSecond: BASE_OPS_PER_SECOND * 2 },
-  { label: '5×', opsPerSecond: BASE_OPS_PER_SECOND * 5 },
-  { label: '20×', opsPerSecond: BASE_OPS_PER_SECOND * 20 },
-  { label: 'Max', opsPerSecond: null },
-];
-
-export const DEFAULT_CODE = `# Harvest the whole field, forever.
-while True:
-    for i in range(get_world_size()):
-        if can_harvest():
-            harvest()
-        move(North)
-    move(East)
+/** A new farm starts with nothing unlocked but harvest(), like the game. */
+export const DEFAULT_CODE = `harvest()
 `;
 
 export interface GameStoreState {
   game: GameState;
-  code: string;
-  breakpoints: number[];
-  speed: OpsPerSecond;
+  workspace: Workspace;
+  /** The code window used last; F5 / F10 run it. */
+  activeFileId: string;
+  /** File the current (or last) run was started from. */
+  runningFileId: string | null;
   runStatus: RunStatus;
-  /** Line of the statement currently executing (or about to, when paused). */
-  currentLine: number | null;
+  /** Statement currently executing (or about to, when paused). */
+  currentLocation: CodeLocation | null;
   lastError: RunError | null;
   variables: VariableSnapshot | null;
   console: ConsoleEntry[];
@@ -57,18 +41,32 @@ export type GameStore = StoreApi<GameStoreState>;
 
 export interface InitialStoreData {
   game: GameState;
-  code?: string;
-  speed?: OpsPerSecond;
+  workspace?: Workspace;
 }
 
-export function createGameStore({ game, code = DEFAULT_CODE, speed = BASE_OPS_PER_SECOND }: InitialStoreData): GameStore {
+/** Applies one of the pure workspace operations (see codeFiles.ts) to the store. */
+export function updateWorkspace(store: GameStore, update: (workspace: Workspace) => Workspace): void {
+  const current = store.getState().workspace;
+  const next = update(current);
+  if (next !== current) store.setState({ workspace: next });
+}
+
+/** Creates an empty code file (optionally in a folder), opens its window and makes it the active one. */
+export function createCodeFile(store: GameStore, folder: string | null = null): string {
+  const id = `f-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  updateWorkspace(store, (workspace) => addFile(workspace, id, folder));
+  store.setState({ activeFileId: id });
+  return id;
+}
+
+export function createGameStore({ game, workspace = createWorkspace(DEFAULT_CODE) }: InitialStoreData): GameStore {
   return createStore<GameStoreState>(() => ({
     game,
-    code,
-    breakpoints: [],
-    speed,
+    workspace,
+    activeFileId: MAIN_FILE_ID,
+    runningFileId: null,
     runStatus: 'idle',
-    currentLine: null,
+    currentLocation: null,
     lastError: null,
     variables: null,
     console: [],

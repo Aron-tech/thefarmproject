@@ -1,5 +1,7 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useEffect, useRef, useState } from 'react';
+import { findFile, setFileCode } from '../core/state/codeFiles.ts';
+import { updateWorkspace } from '../game/gameStore.ts';
 import { FARM_LANGUAGE, FARM_THEME, monaco } from './monacoSetup.ts';
 import { useGame, useGameState } from './gameContext.ts';
 
@@ -7,14 +9,19 @@ type CodeEditor = Parameters<OnMount>[0];
 
 const MARKER_OWNER = 'farm-runtime';
 
-/** Monaco editor with breakpoints in the glyph margin, current-line highlight and error markers. */
-export default function EditorPanel() {
+const NO_BREAKPOINTS: number[] = [];
+
+/** Monaco editor for one code file, with breakpoints in the glyph margin, current-line highlight and error markers. */
+export default function EditorPanel({ fileId }: { fileId: string }) {
   const { store, loop } = useGame();
-  const code = useGameState((s) => s.code);
-  const breakpoints = useGameState((s) => s.breakpoints);
-  const currentLine = useGameState((s) => s.currentLine);
+  const file = useGameState((s) => findFile(s.workspace, fileId));
+  const code = file?.code ?? '';
+  const fileName = file?.name;
+  const breakpoints = file?.breakpoints ?? NO_BREAKPOINTS;
+  // Only locations inside this file matter here.
+  const currentLine = useGameState((s) => (s.currentLocation && s.currentLocation.file === fileName ? s.currentLocation.line : null));
   const runStatus = useGameState((s) => s.runStatus);
-  const lastError = useGameState((s) => s.lastError);
+  const lastError = useGameState((s) => (s.lastError?.location?.file === fileName ? s.lastError : null));
 
   const [editor, setEditor] = useState<CodeEditor | null>(null);
   const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
@@ -29,9 +36,9 @@ export default function EditorPanel() {
         type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS;
       if (!isGutter || !position) return;
       const line = position.lineNumber;
-      const current = store.getState().breakpoints;
+      const current = findFile(store.getState().workspace, fileId)?.breakpoints ?? [];
       const next = current.includes(line) ? current.filter((l) => l !== line) : [...current, line].sort((a, b) => a - b);
-      loop.setBreakpoints(next);
+      loop.setBreakpoints(fileId, next);
     });
   };
 
@@ -53,8 +60,9 @@ export default function EditorPanel() {
         }),
       );
     }
-    if (lastError?.line) {
-      items.push(lineDecoration(lastError.line, { isWholeLine: true, className: 'farm-error-line' }));
+    const errorLine = lastError?.location?.line;
+    if (errorLine) {
+      items.push(lineDecoration(errorLine, { isWholeLine: true, className: 'farm-error-line' }));
     }
     decorations.set(items);
   }, [editor, breakpoints, currentLine, runStatus, lastError]);
@@ -62,7 +70,7 @@ export default function EditorPanel() {
   useEffect(() => {
     const model = editor?.getModel();
     if (!model) return;
-    const line = lastError?.line;
+    const line = lastError?.location?.line;
     monaco.editor.setModelMarkers(
       model,
       MARKER_OWNER,
@@ -87,10 +95,12 @@ export default function EditorPanel() {
 
   return (
     <Editor
+      path={`file:///${fileId}.py`}
       language={FARM_LANGUAGE}
       theme={FARM_THEME}
       value={code}
-      onChange={(value) => store.setState({ code: value ?? '' })}
+      onChange={(value) => updateWorkspace(store, (workspace) => setFileCode(workspace, fileId, value ?? ''))}
+
       onMount={handleMount}
       options={{
         // As in the game, code can only be edited while it is not running.

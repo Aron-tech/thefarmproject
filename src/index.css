@@ -143,6 +143,75 @@ body,
   border-color: var(--farm-olive-dark);
 }
 
+/* ---------------------------------------------------------------- unlock tree */
+
+.farm-unlock-node {
+  color: #f5f5f4;
+  background: #2f2f2f;
+  border: 2px solid #4b4b4b;
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    inset 0 -2px 0 rgb(0 0 0 / 0.3);
+}
+
+.farm-unlock-node-buyable {
+  cursor: pointer;
+  background: linear-gradient(to bottom, var(--farm-olive-light), var(--farm-olive));
+  border-color: var(--farm-olive-dark);
+}
+
+.farm-unlock-node-buyable:hover {
+  filter: brightness(1.15);
+}
+
+.farm-unlock-node-buyable:active {
+  filter: brightness(0.9);
+}
+
+.farm-unlock-node-owned,
+.farm-unlock-node-maxed {
+  border-color: var(--farm-olive);
+}
+
+.farm-unlock-node-locked {
+  color: #c7c7c7;
+}
+
+/* ---------------------------------------------------------------- main (Esc) menu */
+
+.farm-menu-button {
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(to bottom, #555555, #444444);
+  border: 2px solid #333333;
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.15),
+    inset 0 -2px 0 rgb(0 0 0 / 0.3);
+}
+
+.farm-menu-button:hover {
+  filter: brightness(1.15);
+}
+
+.farm-menu-button:active {
+  filter: brightness(0.9);
+}
+
+.farm-menu-button-primary {
+  background: linear-gradient(to bottom, var(--farm-olive-light), var(--farm-olive));
+  border-color: var(--farm-olive-dark);
+}
+
+.farm-menu-button-danger {
+  background: linear-gradient(to bottom, var(--farm-alert-light), var(--farm-alert));
+  border-color: var(--farm-alert-dark);
+}
+
 /* ---------------------------------------------------------------- resource bar */
 
 .farm-item-count {
@@ -223,4 +292,96 @@ body,
 
 .farm-error-line {
   background: rgb(229 80 28 / 0.28);
+}
+
+/* ---------------------------------------------------------------- inline rename */
+
+.farm-title-input {
+  width: 100%;
+  max-width: 260px;
+  padding: 1px 6px;
+  font: inherit;
+  color: #ffffff;
+  background: #1e1e1e;
+  border: 1px solid var(--farm-olive-light);
+  border-radius: 2px;
+  outline: none;
+}
+
+.farm-title-input-invalid {
+  border-color: var(--farm-alert);
+}
+
+/* ---------------------------------------------------------------- files window */
+
+.farm-folder {
+  margin: 0 4px 4px;
+  border: 1px dashed transparent;
+  border-radius: 2px;
+}
+
+.farm-folder-drop {
+  border-color: var(--farm-olive-light);
+  background: rgb(111 146 22 / 0.12);
+}
+
+.farm-file-row {
+  border-radius: 2px;
+}
+
+.farm-file-row:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+
+.farm-file-row-active {
+  background: rgb(255 255 255 / 0.1);
+}
+
+/* ---------------------------------------------------------------- guide window */
+
+.farm-guide-nav {
+  display: block;
+  width: 100%;
+  padding: 5px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #b5b5b5;
+}
+
+.farm-guide-nav:hover {
+  color: #ffffff;
+  background: rgb(255 255 255 / 0.06);
+}
+
+.farm-guide-nav-active {
+  color: #ffffff;
+  background: var(--farm-olive);
+}
+
+.farm-guide-nav-active:hover {
+  background: var(--farm-olive-light);
+}
+
+.farm-guide-code {
+  padding: 10px 12px;
+  font: 13px/1.5 'Fira Mono', Consolas, monospace;
+  color: #f0f0f0;
+  white-space: pre;
+  overflow-x: auto;
+  background: #141414;
+  border: 1px solid #333333;
+  border-radius: 2px;
+}
+
+.farm-guide-signature {
+  font: 600 14px 'Fira Mono', Consolas, monospace;
+  color: #f2d14b;
+}
+
+.farm-guide-inline-code {
+  padding: 0 3px;
+  font: 13px 'Fira Mono', Consolas, monospace;
+  color: #f2d14b;
+  background: rgb(255 255 255 / 0.06);
+  border-radius: 2px;
 }

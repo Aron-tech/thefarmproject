@@ -57,6 +57,7 @@ const UNRIPE_TINTS: Record<EntityType, Color> = {
   Grass: new Color(0.55, 0.95, 0.38),
   Bush: new Color(0.8, 0.85, 0.7),
   Carrot: new Color(0.8, 0.85, 0.7),
+  Sunflower: new Color(0.75, 0.9, 0.6),
 };
 const WHITE = new Color(1, 1, 1);
 const PUFF_COLOR = new Color('#f4efe4');
@@ -211,7 +212,7 @@ const tmpScale = new Vector3();
 const tmpColor = new Color();
 
 function writePlantInstances(game: GameState, now: number, rt: Runtime, meshes: Partial<Record<EntityType, InstancedMesh | null>>): void {
-  const counts: Record<EntityType, number> = { Grass: 0, Bush: 0, Carrot: 0 };
+  const counts = Object.fromEntries(ENTITY_TYPES.map((type) => [type, 0])) as Record<EntityType, number>;
   const { worldSize, cells, tick } = game;
 
   const place = (type: EntityType, cellIndex: number, progress: number, factor: number, lift: number) => {
@@ -221,8 +222,9 @@ function writePlantInstances(game: GameState, now: number, rt: Runtime, meshes: 
     const hash = cellHash(cellIndex);
     const swayAmount = type === 'Grass' ? 0.05 : 0.015;
     const sway = Math.sin(now * 1.6 + hash * 6.28) * swayAmount;
-    // Grass patches only rotate by quarter turns so they still fill their square tile.
-    const yaw = type === 'Grass' ? Math.floor(hash * 4) * (Math.PI / 2) : hash * Math.PI * 2;
+    // Grass patches only rotate by quarter turns so they still fill their square tile; sunflowers face the camera.
+    const yaw =
+      type === 'Grass' ? Math.floor(hash * 4) * (Math.PI / 2) : type === 'Sunflower' ? (hash - 0.5) * 0.5 : hash * Math.PI * 2;
     tmpEuler.set(sway, yaw, sway * 0.6);
     tmpQuaternion.setFromEuler(tmpEuler);
     tmpPosition.set(wx, lift, wz);

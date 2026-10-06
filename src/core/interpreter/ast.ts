@@ -70,7 +70,11 @@ export type Stmt =
   | { kind: 'Break'; line: number }
   | { kind: 'Continue'; line: number }
   | { kind: 'Pass'; line: number }
-  | { kind: 'Global'; line: number; names: string[] };
+  | { kind: 'Global'; line: number; names: string[] }
+  /** `import a, b`: binds each code file as a module object. */
+  | { kind: 'Import'; line: number; modules: string[] }
+  /** `from a import x, y` or `from a import *` (names = null). */
+  | { kind: 'ImportFrom'; line: number; module: string; names: string[] | null };
 
 export interface Module {
   body: Stmt[];

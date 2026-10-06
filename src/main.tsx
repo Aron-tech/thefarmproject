@@ -19,10 +19,10 @@ async function bootstrap(): Promise<void> {
   if (!rootElement) throw new Error('Root element #root not found');
 
   const save = await loadSave();
-  const store = createGameStore(save ? { game: save.game, code: save.code, speed: save.speed } : { game: createGameState() });
+  const store = createGameStore(save ? { game: save.game, workspace: save.workspace } : { game: createGameState() });
   const loop = new GameLoop(store, new InterpreterClient(createWorkerTransport()));
   startAutosave(store, loop);
-  loop.startIdleClock();
+  loop.startClock();
 
   createRoot(rootElement).render(
     <StrictMode>

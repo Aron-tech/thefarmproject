@@ -1,8 +1,16 @@
-import { CROP_DEFS } from './constants.ts';
+import {
+  ACTION_COSTS,
+  ACTION_OPS_COST,
+  ACTIONS_PER_POWER,
+  CROP_DEFS,
+  SUNFLOWER_BONUS_MIN_COUNT,
+  SUNFLOWER_BONUS_MULTIPLIER,
+} from './constants.ts';
 import { createPlant, isFullyGrown } from './crops.ts';
 import { createGrid } from './gameState.ts';
 import { cellIndex, getCell, stepPos } from './grid.ts';
 import type { ActionResult, Cell, DroneAction, EntityType, GameState, Inventory, ItemType } from './types.ts';
+import { canAfford } from './unlocks.ts';
 
 export interface ActionOutcome {
   state: GameState;
@@ -11,9 +19,25 @@ export interface ActionOutcome {
 
 /**
  * Applies a drone action at the given game tick. Pure: the input state is never mutated,
- * unchanged parts of the state are shared with the returned one.
+ * unchanged parts of the state are shared with the returned one. Physical actions use up power.
  */
 export function applyAction(previous: GameState, action: DroneAction, tick: number): ActionOutcome {
+  const outcome = applyActionEffect(previous, action, tick);
+  return ACTION_COSTS[action.kind] === ACTION_OPS_COST ? { ...outcome, state: consumePower(outcome.state) } : outcome;
+}
+
+/** One unit of power lasts ACTIONS_PER_POWER actions. */
+function consumePower(state: GameState): GameState {
+  if (state.poweredActions > 0) return { ...state, poweredActions: state.poweredActions - 1 };
+  if (state.inventory.Power <= 0) return state;
+  return {
+    ...state,
+    inventory: { ...state.inventory, Power: state.inventory.Power - 1 },
+    poweredActions: ACTIONS_PER_POWER - 1,
+  };
+}
+
+function applyActionEffect(previous: GameState, action: DroneAction, tick: number): ActionOutcome {
   const state: GameState = tick === previous.tick ? previous : { ...previous, tick };
   const pos = state.drone.pos;
   const cell = getCell(state.cells, pos, state.worldSize);
@@ -50,6 +74,8 @@ export function applyAction(previous: GameState, action: DroneAction, tick: numb
       return { state, result: state.worldSize };
     case 'numItems':
       return { state, result: state.inventory[action.item] };
+    case 'measure':
+      return { state, result: cell.entity?.petals ?? null };
   }
 }
 
@@ -76,18 +102,28 @@ function addItems(inventory: Inventory, items: Partial<Record<ItemType, number>>
   return next;
 }
 
-function canAfford(inventory: Inventory, cost: Partial<Record<ItemType, number>>): boolean {
-  return (Object.entries(cost) as [ItemType, number][]).every(([item, amount]) => inventory[item] >= amount);
-}
-
 /** Harvests the drone's cell. Unripe entities are destroyed without yield. Returns whether something was removed. */
 function harvest(state: GameState, cell: Cell): ActionOutcome {
   if (!cell.entity) return { state, result: false };
   const ripe = isFullyGrown(cell.entity, state.tick);
-  const harvested = ripe
-    ? { ...state, inventory: addItems(state.inventory, CROP_DEFS[cell.entity.type].harvestYield, 1) }
-    : state;
+  const harvested = ripe ? { ...state, inventory: addItems(state.inventory, harvestYield(state, cell), 1) } : state;
   return { state: clearCell(harvested, cell.ground), result: true };
+}
+
+/** Sunflowers give bonus power when the one with the most petals is harvested from a big enough field. */
+function harvestYield(state: GameState, cell: Cell): Partial<Record<ItemType, number>> {
+  const entity = cell.entity!;
+  const base = CROP_DEFS[entity.type].harvestYield;
+  if (entity.type !== 'Sunflower') return base;
+  let count = 0;
+  let maxPetals = 0;
+  for (const other of state.cells) {
+    if (other.entity?.type !== 'Sunflower') continue;
+    count++;
+    maxPetals = Math.max(maxPetals, other.entity.petals ?? 0);
+  }
+  if (count < SUNFLOWER_BONUS_MIN_COUNT || (entity.petals ?? 0) < maxPetals) return base;
+  return Object.fromEntries(Object.entries(base).map(([item, amount]) => [item, amount * SUNFLOWER_BONUS_MULTIPLIER]));
 }
 
 function plant(state: GameState, cell: Cell, entity: EntityType): ActionOutcome {

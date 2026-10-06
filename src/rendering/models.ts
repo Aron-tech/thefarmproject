@@ -139,10 +139,42 @@ function createCarrot(): BufferGeometry {
   ]);
 }
 
+/** Sunflower: a tall stem with two leaves and a big yellow flower head tilted towards the camera. */
+function createSunflower(): BufferGeometry {
+  const PETALS = 12;
+  const headParts: BufferGeometry[] = [
+    part(new CylinderGeometry(0.13, 0.13, 0.05, 10), '#6b3d1a'),
+    part(new CylinderGeometry(0.1, 0.1, 0.03, 10), '#4a2810', { position: [0, 0.025, 0] }),
+  ];
+  for (let i = 0; i < PETALS; i++) {
+    const angle = (i / PETALS) * Math.PI * 2;
+    headParts.push(
+      part(new ConeGeometry(0.055, 0.17, 4), i % 2 === 0 ? '#f5c518' : '#f7d33d', {
+        position: [Math.cos(angle) * 0.2, 0, Math.sin(angle) * 0.2],
+        // Lay each petal flat, pointing outwards from the centre.
+        rotation: [0, -angle, -Math.PI / 2],
+        scale: [1, 1, 0.35],
+      }),
+    );
+  }
+  const head = mergeGeometries(headParts);
+  if (!head) throw new Error('Failed to merge sunflower head');
+  head.applyMatrix4(
+    new Matrix4().compose(new Vector3(0, 0.78, 0.04), new Quaternion().setFromEuler(new Euler(1.05, 0, 0)), new Vector3(1, 1, 1)),
+  );
+  return merge([
+    part(new CylinderGeometry(0.03, 0.04, 0.78, 6), '#4f8a22', { position: [0, 0.39, 0] }),
+    part(new ConeGeometry(0.09, 0.3, 4), '#5f9e2e', { position: [0.11, 0.32, 0], rotation: [0, 0, -1.1], scale: [1, 1, 0.3] }),
+    part(new ConeGeometry(0.08, 0.26, 4), '#4d8a24', { position: [-0.1, 0.48, 0], rotation: [0, 0, 1.1], scale: [1, 1, 0.3] }),
+    head,
+  ]);
+}
+
 const PLANT_FACTORIES: Record<EntityType, () => BufferGeometry> = {
   Grass: createGrass,
   Bush: createBush,
   Carrot: createCarrot,
+  Sunflower: createSunflower,
 };
 
 const plantCache = new Map<EntityType, BufferGeometry>();
@@ -161,6 +193,7 @@ export const PLANT_PARTICLE_COLORS: Record<EntityType, string> = {
   Grass: '#ecb64c',
   Bush: '#6c9124',
   Carrot: '#e8792a',
+  Sunflower: '#f5c518',
 };
 
 export function createPuffGeometry(): BufferGeometry {

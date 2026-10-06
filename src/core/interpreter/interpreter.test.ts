@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction } from '../state/actions.ts';
 import { createGameState } from '../state/gameState.ts';
-import type { DroneAction, GameState } from '../state/types.ts';
+import type { DroneAction, GameState, UnlockLevels } from '../state/types.ts';
+import { createFullUnlocks, createLockedUnlocks } from '../state/unlocks.ts';
 import { tokenize } from './lexer.ts';
 import { runSync } from './runSync.ts';
 
@@ -134,7 +135,8 @@ describe('errors', () => {
     expect(error.pyType).toBe('SyntaxError');
     expect(error.line).toBe(2);
     expect(errorOf('if True:\nprint(1)').pyType).toBe('IndentationError');
-    expect(errorOf('import os').message).toContain("'import' is not supported");
+    expect(errorOf('import os').message).toContain("no code file named 'os'");
+    expect(errorOf('class A:').message).toContain("'class' is not supported");
   });
 
   it('reports runtime errors at the innermost line', () => {
@@ -209,5 +211,105 @@ describe('game API', () => {
   it('validates argument types', () => {
     expect(() => runOnFarm('move("North")')).toThrow(/expects a value from Direction/);
     expect(() => runOnFarm('plant(Items.Hay)')).toThrow(/expects a value from Entities/);
+  });
+
+  it('measures sunflower petals', () => {
+    const { output: lines } = runOnFarm('print(measure())');
+    expect(lines).toEqual(['None']);
+  });
+});
+
+describe('import', () => {
+  const files = {
+    tools: 'LABEL = "tools"\ncount = 0\ndef bump():\n    global count\n    count += 1\n    return count\nprint("tools loaded")',
+    broken: 'x = 1\ny = 1 / 0',
+    syntax: 'if x\n    pass',
+    nested: 'import tools\ndef twice():\n    return tools.bump() + tools.bump()',
+  };
+  const run = (code: string, unlocks?: UnlockLevels) => runSync(code, { files, unlocks });
+
+  it('imports a file as a module and uses its functions and variables', () => {
+    const result = run('import tools\nprint(tools.LABEL, tools.bump(), tools.bump(), tools.count)');
+    expect(result.error).toBeNull();
+    expect(result.output).toEqual(['tools loaded', 'tools 1 2 2']);
+  });
+
+  it('imports names directly, or everything with *', () => {
+    expect(run('from tools import bump, LABEL\nprint(bump(), LABEL)').output).toEqual(['tools loaded', '1 tools']);
+    expect(run('from tools import *\nprint(bump())').output).toEqual(['tools loaded', '1']);
+    expect(run('def f():\n    from tools import bump\n    return bump()\nprint(f())').output).toEqual(['tools loaded', '1']);
+  });
+
+  it('runs an imported file once and shares it between importers', () => {
+    const result = run('import tools\nimport nested\nprint(nested.twice(), tools.count)');
+    expect(result.output).toEqual(['tools loaded', '3 2']);
+    expect(run('import tools\nimport tools\nfrom tools import bump').output).toEqual(['tools loaded']);
+  });
+
+  it('keeps global variables separate per file', () => {
+    const result = runSync('import tools\ncount = 100\ntools.bump()\nprint(count, tools.count)', { files });
+    expect(result.output).toEqual(['tools loaded', '100 1']);
+  });
+
+  it('reports a missing file, name or attribute', () => {
+    expect(run('import missing').error?.format()).toBe("ImportError: no code file named 'missing' (line 1)");
+    expect(run('from tools import nothing').error?.message).toMatch(/cannot import name 'nothing'/);
+    expect(run('import tools\ntools.nothing').error?.message).toMatch(/module 'tools' has no attribute 'nothing'/);
+  });
+
+  it('reports errors inside imported files with their file and line', () => {
+    expect(run('import broken').error?.format()).toBe('ZeroDivisionError: division by zero (broken, line 2)');
+    expect(run('x = 1\nimport broken').error).toMatchObject({ file: 'broken', line: 2 });
+    expect(run('import syntax').error).toMatchObject({ pyType: 'SyntaxError', file: 'syntax', line: 1 });
+    const inFunction = runSync('import tools\ntools.bump(1)', { files });
+    expect(inFunction.error).toMatchObject({ file: null, line: 2 });
+  });
+
+  it('locates errors raised inside imported functions', () => {
+    const result = runSync('import lib\nlib.fail()', { files: { lib: 'def fail():\n    return 1 / 0' } });
+    expect(result.error?.format()).toBe('ZeroDivisionError: division by zero (lib, line 2)');
+  });
+
+  it('needs the Functions unlock', () => {
+    const locked = createLockedUnlocks();
+    expect(run('import tools', locked).error?.message).toMatch(/import.*Functions/);
+    expect(run('import tools', { ...locked, Functions: 1 }).error?.message).not.toMatch(/Functions/);
+  });
+});
+
+describe('unlocks', () => {
+  const locked = createLockedUnlocks();
+  const lockedErrorOf = (code: string, unlocks: UnlockLevels = locked) => runSync(code, { unlocks }).error;
+
+  it('allows only harvest() and do_a_flip() on a new farm', () => {
+    expect(lockedErrorOf('harvest()\ndo_a_flip()\n# a comment\nif True:\n    pass')).toBeNull();
+  });
+
+  it('rejects locked language features before running, with their line', () => {
+    const error = lockedErrorOf('harvest()\nwhile True:\n    harvest()');
+    expect(error?.pyType).toBe('LockedError');
+    expect(error?.line).toBe(2);
+    expect(error?.message).toMatch(/while.*Loops/);
+    expect(lockedErrorOf('x = 1')?.message).toMatch(/Variables/);
+    expect(lockedErrorOf('do_a_flip() if 1 + 1 else None')?.message).toMatch(/Operators/);
+    expect(lockedErrorOf('def f():\n    pass')?.message).toMatch(/Functions/);
+    expect(lockedErrorOf('[harvest()]')?.message).toMatch(/Lists/);
+  });
+
+  it('rejects locked functions and enum members', () => {
+    expect(lockedErrorOf('move(North)')?.message).toMatch(/move.*Expand/);
+    expect(lockedErrorOf('print(1)')?.message).toMatch(/Debug/);
+    const withPlant = { ...locked, Plant: 1 };
+    expect(lockedErrorOf('plant(Entities.Bush)', withPlant)).toBeNull();
+    expect(lockedErrorOf('plant(Entities.Carrot)', withPlant)?.message).toMatch(/Entities\.Carrot.*Carrots/);
+  });
+
+  it('lets player-defined names shadow locked builtins', () => {
+    const unlocks = { ...locked, Variables: 1, Debug: 1 };
+    expect(lockedErrorOf('len = 3\nprint(len)', unlocks)).toBeNull();
+  });
+
+  it('runs freely once everything is unlocked', () => {
+    expect(lockedErrorOf('x = [i * 2 for i in range(3)]\nprint(len(x))', createFullUnlocks())).toBeNull();
   });
 });

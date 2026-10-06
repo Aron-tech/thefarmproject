@@ -1,5 +1,5 @@
 import type { ActionResult } from '../state/types.ts';
-import type { OpsPerSecond, RunOptions, WorkerToMainMessage } from './protocol.ts';
+import type { BreakpointMap, OpsPerSecond, RunOptions, WorkerToMainMessage } from './protocol.ts';
 import type { InterpreterTransport } from './transport.ts';
 
 /** Main-thread handle to the interpreter: typed commands and run-scoped message filtering. */
@@ -20,9 +20,10 @@ export class InterpreterClient {
     this.handler = handler;
   }
 
-  run(code: string, options: RunOptions): number {
+  /** Runs the `entry` file; the other files can be imported by it. */
+  run(entry: string, files: Readonly<Record<string, string>>, options: RunOptions): number {
     this.currentRunId++;
-    this.transport.postMessage({ type: 'run', runId: this.currentRunId, code, ...options });
+    this.transport.postMessage({ type: 'run', runId: this.currentRunId, entry, files, ...options });
     return this.currentRunId;
   }
 
@@ -43,8 +44,8 @@ export class InterpreterClient {
     this.transport.postMessage({ type: 'step' });
   }
 
-  setBreakpoints(lines: number[]): void {
-    this.transport.postMessage({ type: 'setBreakpoints', lines });
+  setBreakpoints(breakpoints: BreakpointMap): void {
+    this.transport.postMessage({ type: 'setBreakpoints', breakpoints });
   }
 
   setSpeed(opsPerSecond: OpsPerSecond): void {

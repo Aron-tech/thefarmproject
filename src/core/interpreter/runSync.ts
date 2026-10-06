@@ -1,5 +1,5 @@
 import { ACTION_COSTS } from '../state/constants.ts';
-import type { ActionResult, DroneAction } from '../state/types.ts';
+import type { ActionResult, DroneAction, UnlockLevels } from '../state/types.ts';
 import { PyError } from './errors.ts';
 import { createGameInterpreter } from './program.ts';
 import type { ResumeValue } from './values.ts';
@@ -9,6 +9,10 @@ export interface SyncRunOptions {
   onAction?: (action: DroneAction, ticks: number) => ActionResult;
   /** Stops the run (without error) once this many ticks have elapsed. */
   maxTicks?: number;
+  /** Rejects locked features like the game does; everything is available when omitted. */
+  unlocks?: UnlockLevels;
+  /** Other code files the program can import, by name. */
+  files?: Readonly<Record<string, string>>;
 }
 
 export interface SyncRunResult {
@@ -29,7 +33,8 @@ export function runSync(source: string, options: SyncRunOptions = {}): SyncRunRe
   let ticks = 0;
 
   try {
-    const generator = createGameInterpreter(source, () => ticks).run();
+    const generator = createGameInterpreter(source, { getTickCount: () => ticks, unlocks: options.unlocks, files: options.files }).run()
+;
     let resume: ResumeValue = undefined;
     for (;;) {
       const step = generator.next(resume);

@@ -65,26 +65,47 @@ interface FloatingWindowProps {
   /** Extra buttons right of the title, before minimise / close. */
   trailingActions?: ReactNode;
   onClose?: () => void;
+  /** Controls minimisation from outside (e.g. folder actions); otherwise the window keeps it itself. */
+  minimized?: boolean;
+  onMinimizedChange?: (minimized: boolean) => void;
+  /** Called when the window is clicked or focused. */
+  onActivate?: () => void;
+  /** Double click on the title bar (outside its buttons), e.g. to rename. */
+  onTitleDoubleClick?: () => void;
   children: ReactNode;
 }
 
 /** A draggable, resizable, minimisable window floating over the farm, styled like the in-game windows. */
-export function FloatingWindow({ id, title, initialRect, leadingActions, trailingActions, onClose, children }: FloatingWindowProps) {
+export function FloatingWindow({
+  id,
+  title,
+  initialRect,
+  leadingActions,
+  trailingActions,
+  onClose,
+  minimized: minimizedProp,
+  onMinimizedChange,
+  onActivate,
+  onTitleDoubleClick,
+  children,
+}: FloatingWindowProps) {
   const [layout, setLayout] = useState(() => {
     const stored = loadLayout(id, initialRect);
     return { ...stored, rect: clampRect(stored.rect) };
   });
   const [zIndex, setZIndex] = useState(() => ++topZIndex);
   const dragRef = useRef<{ mode: 'move' | 'resize'; startX: number; startY: number; startRect: WindowRect } | null>(null);
-  const { rect, minimized } = layout;
+  const { rect } = layout;
+  const minimized = minimizedProp ?? layout.minimized;
 
   const bringToFront = useCallback(() => {
     setZIndex((current) => (current === topZIndex ? current : ++topZIndex));
-  }, []);
+    onActivate?.();
+  }, [onActivate]);
 
   const beginDrag = (mode: 'move' | 'resize', event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
-    if (mode === 'move' && (event.target as HTMLElement).closest('button')) return;
+    if (mode === 'move' && (event.target as HTMLElement).closest('button, input')) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = { mode, startX: event.clientX, startY: event.clientY, startRect: rect };
@@ -109,10 +130,15 @@ export function FloatingWindow({ id, title, initialRect, leadingActions, trailin
   };
 
   const toggleMinimized = () => {
+    if (onMinimizedChange) {
+      onMinimizedChange(!minimized);
+      return;
+    }
     const next = { ...layout, minimized: !minimized };
     setLayout(next);
     saveLayout(id, next);
   };
+
 
   return (
     <div
@@ -127,6 +153,9 @@ export function FloatingWindow({ id, title, initialRect, leadingActions, trailin
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
+        onDoubleClick={(event) => {
+          if (!(event.target as HTMLElement).closest('button, input')) onTitleDoubleClick?.();
+        }}
       >
         {leadingActions}
         <div className="farm-window-title min-w-0 flex-1 truncate pl-1">{title}</div>

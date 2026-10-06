@@ -21,8 +21,7 @@ const AUGMENTED_ASSIGN: Record<string, BinaryOperator> = {
 const COMPARISON_OPS = new Set(['<', '>', '<=', '>=', '==', '!=']);
 
 const UNSUPPORTED_KEYWORDS = new Set([
-  'class', 'import', 'from', 'try', 'except', 'finally', 'raise', 'with', 'yield', 'async', 'await', 'del',
-  'assert', 'nonlocal', 'as',
+  'class', 'try', 'except', 'finally', 'raise', 'with', 'yield', 'async', 'await', 'del', 'assert', 'nonlocal', 'as',
 ]);
 
 export function parse(source: string): Module {
@@ -145,6 +144,26 @@ class Parser {
           const names = [this.expectName()];
           while (this.match('op', ',')) names.push(this.expectName());
           return { kind: 'Global', line, names };
+        }
+        case 'import': {
+          this.advance();
+          const modules = [this.expectName()];
+          while (this.match('op', ',')) modules.push(this.expectName());
+          return { kind: 'Import', line, modules };
+        }
+        case 'from': {
+          this.advance();
+          const module = this.expectName();
+          this.expect('keyword', 'import');
+          if (this.match('op', '*')) return { kind: 'ImportFrom', line, module, names: null };
+          const parenthesized = this.match('op', '(');
+          const names = [this.expectName()];
+          while (this.match('op', ',')) {
+            if (parenthesized && this.checkOp(')')) break;
+            names.push(this.expectName());
+          }
+          if (parenthesized) this.expect('op', ')');
+          return { kind: 'ImportFrom', line, module, names };
         }
       }
     }
@@ -642,6 +661,13 @@ export function analyzeScope(body: Stmt[], params: Param[]): { localNames: strin
           break;
         case 'FunctionDef':
           locals.add(stmt.name);
+          break;
+        case 'Import':
+          stmt.modules.forEach((module) => locals.add(module));
+          break;
+        case 'ImportFrom':
+          if (stmt.names === null) throw new PyError('SyntaxError', "'import *' is only allowed at the top level of a file", stmt.line);
+          stmt.names.forEach((name) => locals.add(name));
           break;
         case 'Global':
           for (const name of stmt.names) {

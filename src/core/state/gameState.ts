@@ -1,6 +1,7 @@
 import { DEFAULT_RNG_SEED, DEFAULT_WORLD_SIZE } from './constants.ts';
 import { createPlant } from './crops.ts';
-import { ITEM_TYPES, type Cell, type GameState, type Inventory } from './types.ts';
+import { ITEM_TYPES, type Cell, type GameState, type Inventory, type UnlockLevels } from './types.ts';
+import { createLockedUnlocks } from './unlocks.ts';
 
 export function createEmptyInventory(): Inventory {
   const inventory = {} as Inventory;
@@ -20,13 +21,19 @@ export function createGrid(worldSize: number, tick: number, rngState: number): [
   return [cells, rng];
 }
 
-export function createGameState(worldSize = DEFAULT_WORLD_SIZE, seed = DEFAULT_RNG_SEED): GameState {
+export function createGameState(
+  worldSize = DEFAULT_WORLD_SIZE,
+  seed = DEFAULT_RNG_SEED,
+  unlocks: UnlockLevels = createLockedUnlocks(),
+): GameState {
   const [cells, rngState] = createGrid(worldSize, 0, seed);
   return {
     worldSize,
     cells,
     drone: { pos: { x: 0, y: 0 } },
     inventory: createEmptyInventory(),
+    unlocks,
+    poweredActions: 0,
     tick: 0,
     rngState,
   };

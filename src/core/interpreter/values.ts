@@ -62,10 +62,14 @@ export interface PyFunction {
   localNames: ReadonlySet<string>;
   globalNames: ReadonlySet<string>;
   closure: Scope;
+  /** Code file the function was defined in, for error and breakpoint locations. */
+  file: string;
 }
 export interface PyBuiltin { type: 'builtin'; name: string; call: BuiltinImpl }
 export interface PyEnum { type: 'enum'; group: string; member: string; repr: string }
 export interface PyNamespace { type: 'namespace'; name: string; members: ReadonlyMap<string, PyValue> }
+/** An imported code file; its attributes are the file's global variables. */
+export interface PyModule { type: 'module'; name: string; scope: Scope }
 
 export type PyValue =
   | PyNone
@@ -81,7 +85,8 @@ export type PyValue =
   | PyFunction
   | PyBuiltin
   | PyEnum
-  | PyNamespace;
+  | PyNamespace
+  | PyModule;
 
 export type PyNumber = PyBool | PyInt | PyFloat;
 
@@ -192,6 +197,7 @@ export function hashKey(value: PyValue): string {
     case 'function':
     case 'builtin':
     case 'namespace':
+    case 'module':
       return `o:${objectId(value)}`;
     default:
       throw new PyError('TypeError', `unhashable type: '${typeName(value)}'`);
@@ -358,6 +364,8 @@ export function repr(value: PyValue): string {
       return value.repr;
     case 'namespace':
       return `<namespace ${value.name}>`;
+    case 'module':
+      return `<module '${value.name}'>`;
   }
 }
 

@@ -18,8 +18,7 @@ export async function loadSave(): Promise<SaveData | null> {
 }
 
 function currentSave(store: GameStore, loop: GameLoop): SaveData {
-  const { code, speed } = store.getState();
-  return createSaveData(loop.getState(), code, speed);
+  return createSaveData(loop.getState(), store.getState().workspace);
 }
 
 export async function writeSave(store: GameStore, loop: GameLoop): Promise<void> {

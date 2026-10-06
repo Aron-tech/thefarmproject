@@ -485,6 +485,12 @@ export function getAttribute(obj: PyValue, attr: string): PyValue {
     if (member) return member;
     throw new PyError('AttributeError', `'${obj.name}' has no attribute '${attr}'`);
   }
+  if (obj.type === 'module') {
+    const member = obj.scope.vars.get(attr);
+    if (member) return member;
+    throw new PyError('AttributeError', `module '${obj.name}' has no attribute '${attr}'`);
+  }
+
   const method = METHODS[obj.type]?.[attr];
   if (method) {
     return pyBuiltin(attr, (args, kwargs, ctx) => {

@@ -26,6 +26,7 @@ import {
   type CallContext,
   type Gen,
   type PyFunction,
+  type PyModule,
   type PyValue,
 } from './values.ts';
 
@@ -39,7 +40,13 @@ export interface InterpreterOptions {
   builtins: ReadonlyMap<string, PyValue>;
   getTickCount?: () => number;
   maxRecursionDepth?: number;
+  /** Name of the code file being run. */
+  fileName?: string;
+  /** Parses another code file for `import`; throws a PyError when it does not exist or does not compile. */
+  resolveModule?: (name: string) => Module;
 }
+
+export const DEFAULT_FILE_NAME = 'main';
 
 export interface VariableSnapshot {
   globals: Record<string, string>;
@@ -53,13 +60,19 @@ export interface VariableSnapshot {
  */
 export class Interpreter {
   readonly globals = new Scope(null, null, new Set());
+  readonly fileName: string;
   /** Line of the innermost statement currently executing (kept on error for reporting). */
   currentLine = 0;
+  /** Code file of that statement: the file being run, or an imported one. */
+  currentFile: string;
 
   private readonly module: Module;
   private readonly builtins: ReadonlyMap<string, PyValue>;
   private readonly maxRecursionDepth: number;
   private readonly ctx: CallContext;
+  private readonly resolveModule: (name: string) => Module;
+  /** Imported files, each executed once; the entry is cached when partially run, as in Python. */
+  private readonly modules = new Map<string, PyModule>();
   private currentScope: Scope = this.globals;
   private depth = 0;
 
@@ -67,6 +80,14 @@ export class Interpreter {
     this.module = module;
     this.builtins = options.builtins;
     this.maxRecursionDepth = options.maxRecursionDepth ?? DEFAULT_MAX_RECURSION_DEPTH;
+    this.fileName = options.fileName ?? DEFAULT_FILE_NAME;
+    this.currentFile = this.fileName;
+    this.resolveModule =
+      options.resolveModule ??
+      ((name) => {
+        throw new PyError('ImportError', `no code file named '${name}'`);
+      });
+    this.modules.set(this.fileName, { type: 'module', name: this.fileName, scope: this.globals });
     const getTickCount = options.getTickCount ?? (() => 0);
     this.ctx = {
       callValue: (fn, args, kwargs) => this.callValue(fn, args, kwargs),
@@ -98,19 +119,31 @@ export class Interpreter {
     };
   }
 
+  /** Errors are reported in the file and at the line where they happened; null file means the file being run. */
   private normalizeError(error: unknown): PyError {
+    const file = this.currentFile === this.fileName ? null : this.currentFile;
     if (error instanceof PyError) {
-      if (error.line === null) error.line = this.currentLine;
+      if (error.line === null) {
+        error.line = this.currentLine;
+        error.file = file;
+      }
       return error;
     }
     if (error instanceof RangeError && /call stack/i.test(error.message)) {
-      return new PyError('RecursionError', 'maximum recursion depth exceeded', this.currentLine);
+      return new PyError('RecursionError', 'maximum recursion depth exceeded', this.currentLine, file);
     }
     const message = error instanceof Error ? error.message : String(error);
-    return new PyError('RuntimeError', `internal interpreter error: ${message}`, this.currentLine);
+    return new PyError('RuntimeError', `internal interpreter error: ${message}`, this.currentLine, file);
   }
 
   // ---------------------------------------------------------------- names
+
+  /** Every file has its own global scope: the root of the scope chain. */
+  private moduleScope(scope: Scope): Scope {
+    let current = scope;
+    while (current.parent) current = current.parent;
+    return current;
+  }
 
   private lookup(name: string, scope: Scope): PyValue {
     let current: Scope | null = scope;
@@ -123,16 +156,61 @@ export class Interpreter {
       }
       current = current.parent;
     }
-    const value = this.globals.vars.get(name) ?? this.builtins.get(name);
+    const value = this.moduleScope(scope).vars.get(name) ?? this.builtins.get(name);
     if (!value) throw new PyError('NameError', `name '${name}' is not defined`);
     return value;
   }
 
   private assignName(name: string, value: PyValue, scope: Scope): void {
     if (scope.localNames !== null && scope.globalNames.has(name)) {
-      this.globals.vars.set(name, value);
+      this.moduleScope(scope).vars.set(name, value);
     } else {
       scope.vars.set(name, value);
+    }
+  }
+
+  // ---------------------------------------------------------------- imports
+
+  /** Runs a code file once and returns it as a module; later imports reuse it. */
+  private *importModule(name: string): Gen<PyModule> {
+    const cached = this.modules.get(name);
+    if (cached) return cached;
+    const ast = this.resolveModule(name);
+    const module: PyModule = { type: 'module', name, scope: new Scope(null, null, new Set()) };
+    this.modules.set(name, module);
+
+    const savedFile = this.currentFile;
+    const savedLine = this.currentLine;
+    const savedScope = this.currentScope;
+    this.currentFile = name;
+    this.currentScope = module.scope;
+    try {
+      yield* this.execBlock(ast.body, module.scope);
+    } finally {
+      this.currentScope = savedScope;
+    }
+    // On error the location stays inside the imported file, so it is reported there.
+    this.currentFile = savedFile;
+    this.currentLine = savedLine;
+    return module;
+  }
+
+  private *execImport(stmt: Extract<Stmt, { kind: 'Import' | 'ImportFrom' }>, scope: Scope): Gen<void> {
+    if (stmt.kind === 'Import') {
+      for (const name of stmt.modules) this.assignName(name, yield* this.importModule(name), scope);
+      return;
+    }
+    const module = yield* this.importModule(stmt.module);
+    if (stmt.names === null) {
+      for (const [name, value] of module.scope.vars) {
+        if (!name.startsWith('_')) this.assignName(name, value, scope);
+      }
+      return;
+    }
+    for (const name of stmt.names) {
+      const value = module.scope.vars.get(name);
+      if (!value) throw new PyError('ImportError', `cannot import name '${name}' from '${stmt.module}'`);
+      this.assignName(name, value, scope);
     }
   }
 
@@ -239,6 +317,10 @@ export class Interpreter {
       case 'Pass':
       case 'Global':
         return 'normal';
+      case 'Import':
+      case 'ImportFrom':
+        yield* this.execImport(stmt, scope);
+        return 'normal';
     }
   }
 
@@ -292,6 +374,7 @@ export class Interpreter {
       localNames: new Set(localNames),
       globalNames: new Set(globalNames),
       closure: scope,
+      file: this.currentFile,
     };
   }
 
@@ -312,8 +395,10 @@ export class Interpreter {
 
     const savedScope = this.currentScope;
     const savedLine = this.currentLine;
+    const savedFile = this.currentFile;
     this.depth++;
     this.currentScope = scope;
+    this.currentFile = fn.file;
     try {
       let result: PyValue = NONE;
       if (Array.isArray(fn.body)) {
@@ -323,7 +408,9 @@ export class Interpreter {
         result = yield* this.evalExpr(fn.body, scope);
       }
       this.currentLine = savedLine;
+      this.currentFile = savedFile;
       return result;
+
     } finally {
       this.depth--;
       this.currentScope = savedScope;

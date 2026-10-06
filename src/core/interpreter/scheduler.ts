@@ -3,7 +3,7 @@ import type { ActionResult, DroneAction } from '../state/types.ts';
 import { PyError } from './errors.ts';
 import type { Interpreter } from './evaluator.ts';
 import { createGameInterpreter } from './program.ts';
-import type { MainToWorkerMessage, OpsPerSecond, RunOptions, WorkerToMainMessage } from './protocol.ts';
+import type { BreakpointMap, CodeLocation, MainToWorkerMessage, OpsPerSecond, RunOptions, WorkerToMainMessage } from './protocol.ts';
 import { OP_SIGNAL, type Gen, type ResumeValue } from './values.ts';
 
 /** Longest stretch of synchronous interpretation before yielding to the event loop (keeps `stop` responsive). */
@@ -25,10 +25,11 @@ interface ActiveRun {
   interpreter: Interpreter;
   generator: Gen<void>;
   ticks: number;
-  line: number;
+  /** Location of the statement currently executing. */
+  location: CodeLocation;
   opsPerSecond: OpsPerSecond;
   budget: number;
-  breakpoints: Set<number>;
+  breakpoints: Map<string, Set<number>>;
   paused: boolean;
   stepping: boolean;
   resumeValue: ResumeValue;
@@ -38,6 +39,15 @@ interface ActiveRun {
 }
 
 type SliceOutcome = 'done' | 'action' | 'budget' | 'slice' | 'paused';
+
+function toBreakpointSets(breakpoints: BreakpointMap): Map<string, Set<number>> {
+  return new Map(Object.entries(breakpoints).map(([file, lines]) => [file, new Set(lines)]));
+}
+
+/** Error location; errors in the file being run carry no file name. */
+function errorLocation(error: PyError, entry: string): CodeLocation | null {
+  return error.line === null ? null : { file: error.file ?? entry, line: error.line };
+}
 
 /**
  * Drives an interpreter generator inside the worker: meters ticks against the configured speed,
@@ -56,7 +66,7 @@ export class ExecutionScheduler {
     const run = this.active;
     switch (message.type) {
       case 'run':
-        this.start(message.runId, message.code, message);
+        this.start(message.runId, message.entry, message.files, message);
         return;
       case 'stop':
         if (run) this.end(run);
@@ -71,7 +81,7 @@ export class ExecutionScheduler {
         if (run?.paused) this.leavePause(run, true);
         return;
       case 'setBreakpoints':
-        if (run) run.breakpoints = new Set(message.lines);
+        if (run) run.breakpoints = toBreakpointSets(message.breakpoints);
         return;
       case 'setSpeed':
         if (run) {
@@ -89,16 +99,22 @@ export class ExecutionScheduler {
     }
   }
 
-  private start(runId: number, code: string, options: RunOptions): void {
+  private start(runId: number, entry: string, files: Readonly<Record<string, string>>, options: RunOptions): void {
     if (this.active) this.end(this.active);
 
     let run: ActiveRun | null = null;
     let interpreter: Interpreter;
     try {
-      interpreter = createGameInterpreter(code, () => run?.ticks ?? options.startTicks);
+      interpreter = createGameInterpreter(files[entry] ?? '', {
+        getTickCount: () => run?.ticks ?? options.startTicks,
+        unlocks: options.unlocks,
+        fileName: entry,
+        files,
+      });
     } catch (error) {
       const pyError = error instanceof PyError ? error : new PyError('SyntaxError', String(error));
-      this.host.post({ type: 'error', runId, ticks: options.startTicks, message: pyError.format(), line: pyError.line });
+      const location = errorLocation(pyError, entry);
+      this.host.post({ type: 'error', runId, ticks: options.startTicks, message: pyError.format(), location });
       return;
     }
 
@@ -107,10 +123,10 @@ export class ExecutionScheduler {
       interpreter,
       generator: interpreter.run(),
       ticks: options.startTicks,
-      line: 0,
+      location: { file: entry, line: 0 },
       opsPerSecond: options.opsPerSecond,
       budget: 0,
-      breakpoints: new Set(options.breakpoints),
+      breakpoints: toBreakpointSets(options.breakpoints),
       paused: false,
       stepping: options.pauseAtStart,
       resumeValue: undefined,
@@ -134,7 +150,7 @@ export class ExecutionScheduler {
       type: 'paused',
       runId: run.id,
       ticks: run.ticks,
-      line: run.line,
+      location: run.location,
       variables: run.interpreter.getVariables(),
     });
   }
@@ -175,7 +191,7 @@ export class ExecutionScheduler {
       }
       if (outcome === 'paused') continue;
 
-      this.host.post({ type: 'progress', runId: run.id, ticks: run.ticks, line: run.line });
+      this.host.post({ type: 'progress', runId: run.id, ticks: run.ticks, location: run.location });
       let wait = 0;
       if (outcome === 'budget' && run.opsPerSecond !== null && run.opsPerSecond > 0) {
         wait = Math.min(MAX_SLEEP_MS, Math.max(1, ((1 - run.budget) * 1000) / run.opsPerSecond));
@@ -203,8 +219,9 @@ export class ExecutionScheduler {
           run.ticks++;
           run.budget--;
           if (signal !== OP_SIGNAL) {
-            run.line = signal;
-            if (run.stepping || run.breakpoints.has(signal)) {
+            const file = run.interpreter.currentFile;
+            if (run.location.line !== signal || run.location.file !== file) run.location = { file, line: signal };
+            if (run.stepping || run.breakpoints.get(file)?.has(signal)) {
               this.enterPause(run);
               return 'paused';
             }
@@ -224,7 +241,8 @@ export class ExecutionScheduler {
       }
     } catch (error) {
       const pyError = error instanceof PyError ? error : new PyError('RuntimeError', String(error));
-      this.host.post({ type: 'error', runId: run.id, ticks: run.ticks, message: pyError.format(), line: pyError.line });
+      const location = errorLocation(pyError, run.interpreter.fileName);
+      this.host.post({ type: 'error', runId: run.id, ticks: run.ticks, message: pyError.format(), location });
       this.end(run);
       return 'done';
     }

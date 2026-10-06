@@ -1,60 +1,41 @@
-import { useState } from 'react';
-import { SPEED_PRESETS } from '../game/gameStore.ts';
-import { FileMenu } from './FileMenu.tsx';
-import { useGame, useGameState } from './gameContext.ts';
-import { MenuIcon, PlusIcon } from './icons.tsx';
+import type { ReactNode } from 'react';
+import { FilesIcon, GearIcon, GuideIcon, MenuIcon, PlusIcon } from './icons.tsx';
 
 interface ToolbarProps {
-  onOpenCode: () => void;
-  outputOpen: boolean;
-  onToggleOutput: () => void;
+  onNewFile: () => void;
+  onToggleFiles: () => void;
+  onToggleGuide: () => void;
+  onOpenUnlocks: () => void;
+  onOpenMenu: () => void;
 }
 
-/** Top-right square buttons, like the game's; the menu holds speed, output and save management. */
-export function Toolbar({ onOpenCode, outputOpen, onToggleOutput }: ToolbarProps) {
-  const { loop } = useGame();
-  const speed = useGameState((s) => s.speed);
-  const [menuOpen, setMenuOpen] = useState(false);
-
+function ToolbarButton({ title, onClick, children }: { title: string; onClick: () => void; children: ReactNode }) {
   return (
-    <div className="absolute top-3 right-3 z-[30] flex flex-col items-end gap-2">
-      <div className="flex gap-2">
-        <button type="button" className="farm-square-button farm-square-button-olive farm-toolbar-button" title="Open code window" onClick={onOpenCode}>
-          <PlusIcon />
-        </button>
-        <button
-          type="button"
-          className="farm-square-button farm-square-button-olive farm-toolbar-button"
-          title="Menu"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          <MenuIcon />
-        </button>
-      </div>
-      {menuOpen && (
-        <div className="farm-menu w-64 p-3 text-sm">
-          <div className="mb-1 font-semibold text-stone-200">Speed</div>
-          <div className="mb-3 flex gap-1" role="group" aria-label="Speed">
-            {SPEED_PRESETS.map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                onClick={() => loop.setSpeed(preset.opsPerSecond)}
-                className={`farm-chip ${preset.opsPerSecond === speed ? 'farm-chip-active' : ''}`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-          <label className="mb-3 flex cursor-pointer items-center gap-2 text-stone-200">
-            <input type="checkbox" checked={outputOpen} onChange={onToggleOutput} className="accent-lime-600" />
-            Show output window
-          </label>
-          <div className="mb-1 font-semibold text-stone-200">Save</div>
-          <FileMenu />
-        </div>
-      )}
+    <button type="button" className="farm-square-button farm-square-button-olive farm-toolbar-button" title={title} aria-label={title} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
+/** Top-right square buttons, like the game's: new code file, files, guide, the unlock tree and the main menu. */
+export function Toolbar({ onNewFile, onToggleFiles, onToggleGuide, onOpenUnlocks, onOpenMenu }: ToolbarProps) {
+  return (
+    <div className="absolute top-3 right-3 z-[30] flex gap-2">
+      <ToolbarButton title="New code window" onClick={onNewFile}>
+        <PlusIcon />
+      </ToolbarButton>
+      <ToolbarButton title="Files" onClick={onToggleFiles}>
+        <FilesIcon />
+      </ToolbarButton>
+      <ToolbarButton title="Guide" onClick={onToggleGuide}>
+        <GuideIcon />
+      </ToolbarButton>
+      <ToolbarButton title="Unlocks" onClick={onOpenUnlocks}>
+        <MenuIcon />
+      </ToolbarButton>
+      <ToolbarButton title="Menu (Esc)" onClick={onOpenMenu}>
+        <GearIcon />
+      </ToolbarButton>
     </div>
   );
 }

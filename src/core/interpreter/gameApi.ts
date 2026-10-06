@@ -109,6 +109,10 @@ export function createGameBuiltins(): Map<string, PyValue> {
     const item = expectEnum<ItemType>(args[0], 'Items', 'num_items');
     return pyInt(asNumber(yield* requestAction({ kind: 'numItems', item })));
   });
+  define('measure', 0, function* () {
+    const result = yield* requestAction({ kind: 'measure' });
+    return result === null ? NONE : pyInt(asNumber(result));
+  });
   builtins.set(
     'get_tick_count',
     pyBuiltin('get_tick_count', (args, _kwargs, ctx) => {
