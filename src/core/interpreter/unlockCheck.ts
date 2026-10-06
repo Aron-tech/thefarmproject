@@ -56,7 +56,7 @@ export const BUILTIN_UNLOCKS: Readonly<Record<string, UnlockId>> = {
 };
 
 /** Enum members (`Entities.Carrot`) and the unlock that introduces them. */
-const MEMBER_UNLOCKS: Readonly<Record<string, UnlockId>> = {
+export const MEMBER_UNLOCKS: Readonly<Record<string, UnlockId>> = {
   'Entities.Bush': 'Plant',
   'Entities.Carrot': 'Carrots',
   'Entities.Sunflower': 'Sunflowers',

@@ -270,7 +270,7 @@ function indexOf(items: readonly PyValue[], value: PyValue, what: string): numbe
   return index;
 }
 
-const LIST_METHODS: Record<string, MethodImpl> = {
+export const LIST_METHODS: Record<string, MethodImpl> = {
   append: (self, args) => {
     checkArgCount('append', args, 1);
     (self as { items: PyValue[] }).items.push(args[0]!);
@@ -342,7 +342,7 @@ const TUPLE_METHODS: Record<string, MethodImpl> = {
 
 type DictSelf = { entries: Map<string, [PyValue, PyValue]> };
 
-const DICT_METHODS: Record<string, MethodImpl> = {
+export const DICT_METHODS: Record<string, MethodImpl> = {
   get: (self, args) => {
     checkArgCount('get', args, 1, 2);
     return (self as DictSelf).entries.get(hashKey(args[0]!))?.[1] ?? args[1] ?? NONE;
@@ -388,7 +388,7 @@ const DICT_METHODS: Record<string, MethodImpl> = {
 
 type SetSelf = { entries: Map<string, PyValue> };
 
-const SET_METHODS: Record<string, MethodImpl> = {
+export const SET_METHODS: Record<string, MethodImpl> = {
   add: (self, args) => {
     checkArgCount('add', args, 1);
     (self as SetSelf).entries.set(hashKey(args[0]!), args[0]!);
@@ -430,7 +430,7 @@ function strArg(args: PyValue[], index: number, method: string): string {
   return value.value;
 }
 
-const STR_METHODS: Record<string, MethodImpl> = {
+export const STR_METHODS: Record<string, MethodImpl> = {
   upper: (self) => pyStr(selfStr(self).toUpperCase()),
   lower: (self) => pyStr(selfStr(self).toLowerCase()),
   strip: (self) => pyStr(selfStr(self).trim()),

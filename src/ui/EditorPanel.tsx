@@ -2,6 +2,7 @@ import Editor, { type OnMount } from '@monaco-editor/react';
 import { useEffect, useRef, useState } from 'react';
 import { findFile, setFileCode } from '../core/state/codeFiles.ts';
 import { updateWorkspace } from '../game/gameStore.ts';
+import { connectCodeCompletion } from './codeCompletion.ts';
 import { FARM_LANGUAGE, FARM_THEME, monaco } from './monacoSetup.ts';
 import { useGame, useGameState } from './gameContext.ts';
 
@@ -24,6 +25,7 @@ export default function EditorPanel({ fileId }: { fileId: string }) {
   const lastError = useGameState((s) => (s.lastError?.location?.file === fileName ? s.lastError : null));
 
   const [editor, setEditor] = useState<CodeEditor | null>(null);
+  useEffect(() => connectCodeCompletion(store), [store]);
   const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
 
   const handleMount: OnMount = (mounted) => {
@@ -123,6 +125,15 @@ export default function EditorPanel({ fileId }: { fileId: string }) {
         overviewRulerLanes: 0,
         hideCursorInOverviewRuler: true,
         scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
+        // Suggestions come from the unlock-aware provider only, never from words in the file.
+        wordBasedSuggestions: 'off',
+        quickSuggestions: { other: true, comments: false, strings: false },
+        suggestOnTriggerCharacters: true,
+        parameterHints: { enabled: true },
+        snippetSuggestions: 'inline',
+        suggest: { showWords: false, showSnippets: false, preview: true },
+        tabCompletion: 'on',
+        fixedOverflowWidgets: true,
       }}
     />
   );
